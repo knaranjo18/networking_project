@@ -18,4 +18,3 @@ if check_checksum16(full_bad[0:-2], full_bad[-2:]):
     print("[Fail] Checksum matched for bad data")
 else:
     print("[Pass] Checksum did not match for bad data")
-

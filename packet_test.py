@@ -1,4 +1,5 @@
 from Packets import AckPacket, DataPacket
+import sys
 
 for orig_seq in [0, 1]:
     orig_data = bytes([0xDE, 0xAD, 0xBE, 0xAF])
@@ -14,7 +15,7 @@ for orig_seq in [0, 1]:
         print("[Pass] Checksum did not detect errors in Data Packet")
     else:
         print("[Fail] Checksum detected errors ni Data Packet")
-        exit
+        sys.exit()
 
     if orig_data == rx_data:
         print("[Pass] Tx matches Rx data")
@@ -31,7 +32,7 @@ print("")
 for orig_ack_seq in [0, 1]:
     ack = AckPacket(orig_ack_seq)
     ack_bytes = ack.full_pkt
-
+    rx_ack0_seq: int = 0
     rx_ack = AckPacket.packet_from_bytes(ack_bytes)
 
     if rx_ack:

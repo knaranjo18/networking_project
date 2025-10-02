@@ -2,13 +2,55 @@ from dataclasses import dataclass, field
 
 from checksum import check_checksum16, gen_checksum16
 
+@dataclass(frozen=True)
+class Packet:
+    seq_num: int # Either 0 or 1
+    # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
+    # 1st bit of first byte is seq number, rest of first 2 bytes is # of data bytes + variable data length + optional padding + 2 bytes checksum
+    full_pkt: bytes = field(init=False)
+
+    # Check for data length/ack here too - Jesse
+    @staticmethod
+    def is_corrupt(pkt: bytes) -> bool:
+        if len(pkt) <= 2:
+            return True
+
+        # Last two bytes are the checksum
+        checksum = pkt[-2:]
+        return not check_checksum16(pkt[0:-2], checksum)
+
+    # Not sure if this is right - Jesse
+    @staticmethod
+    def is_ack(pkt: bytes) -> bool:
+        return pkt[1] == 0xAA and len(pkt) == 4
+
+    @staticmethod
+    def is_data(pkt: bytes) -> bool:
+        return not Packet.is_ack(pkt)
+
+    @staticmethod
+    def ack_seq(pkt: bytes) -> int:
+        if not Packet.is_ack(pkt):
+            return False
+        return pkt[0]
+
+    @staticmethod
+    def data_seq(pkt: bytes) -> int:
+        if not Packet.is_data(pkt):
+            return False
+        return pkt[0] >> 7
+
+    def get_seq(self) -> int:
+        return self.seq_num
+
+    def extract_data(self) -> bytes:
+        return self.full_pkt
 
 @dataclass(frozen=True)
-class DataPacket:
+class DataPacket(Packet):
     seq_num: int # 0 or 1
     data: bytes  # actual data
     checksum: bytes # checksum covers the header and the data 
-    full_pkt: bytes = field(init=False)  # 1st bit of first byte is seq number, rest of first 2 bytes is # of data bytes + variable data length + optional padding + 2 bytes checksum 
 
     NUM_DATA_ACCESS_MASK: int = field(default=0x7fff, init=False)  # Used for access num data value from first two bytes (can also be used to clear seq_num bit)
     SEQ_NUM_ACCESS_MASK: int = field(default=1 << 15, init=False) # Used for accessing seq_num from first two bytes
@@ -25,11 +67,11 @@ class DataPacket:
         num_data = len(self.data)
 
         # Clear the leftmost bit of the two bytes
-        header = num_data & self.NUM_DATA_ACCESS_MASK 
+        header = num_data & self.NUM_DATA_ACCESS_MASK
 
         # Set the left most bit to the sequence number
-        header |= (seq_num << 15) 
-        
+        header |= (seq_num << 15)
+
         header_bytes = header.to_bytes(2, "big")
 
         if num_data > self.DATA_SIZE:
@@ -67,10 +109,8 @@ class DataPacket:
             print("Checksum detected error!!!")
             return None
 
-
 @dataclass(frozen=True)
-class AckPacket:
-    seq_num: int # Either 0 or 1
+class AckPacket(Packet):
     ack_msg: bytes = field(default=bytes([0xAA]), init=False)
     full_pkt: bytes = field(init=False) # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
 

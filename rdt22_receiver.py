@@ -1,4 +1,5 @@
 import socket as soc
+from Packets import Packet, DataPacket, AckPacket
 
 # --- State constants ---
 WAIT_0 = 0
@@ -26,7 +27,7 @@ class RDT22Receiver:
             rcvpkt = udt_rcv(self.sock)
 
             if self.state == WAIT_0:
-                if not is_corrupt(rcvpkt) and has_seq(rcvpkt, 0):
+                if not Packet.is_corrupt(rcvpkt) and Packet.data_seq(rcvpkt) == 0:
                     data = extract_data(rcvpkt)
                     deliver_data(data)
                     ack = make_ack(0)

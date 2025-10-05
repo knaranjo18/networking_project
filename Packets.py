@@ -2,9 +2,10 @@ from dataclasses import dataclass, field
 
 from checksum import check_checksum16, gen_checksum16
 
+
 @dataclass(frozen=True)
 class Packet:
-    seq_num: int # Either 0 or 1
+    seq_num: int  # Either 0 or 1
     # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
     # 1st bit of first byte is seq number, rest of first 2 bytes is # of data bytes + variable data length + optional padding + 2 bytes checksum
     full_pkt: bytes = field(init=False)
@@ -46,14 +47,15 @@ class Packet:
     def extract_data(self) -> bytes:
         return self.full_pkt
 
+
 @dataclass(frozen=True)
 class DataPacket(Packet):
-    seq_num: int # 0 or 1
+    seq_num: int  # 0 or 1
     data: bytes  # actual data
-    checksum: bytes # checksum covers the header and the data 
+    checksum: bytes  # checksum covers the header and the data
 
-    NUM_DATA_ACCESS_MASK: int = field(default=0x7fff, init=False)  # Used for access num data value from first two bytes (can also be used to clear seq_num bit)
-    SEQ_NUM_ACCESS_MASK: int = field(default=1 << 15, init=False) # Used for accessing seq_num from first two bytes
+    NUM_DATA_ACCESS_MASK: int = field(default=0x7FFF, init=False)  # Used for access num data value from first two bytes (can also be used to clear seq_num bit)
+    SEQ_NUM_ACCESS_MASK: int = field(default=1 << 15, init=False)  # Used for accessing seq_num from first two bytes
     FULL_SIZE: int = field(default=1024, init=False)
     HEADER_LENGTH: int = field(default=2, init=False)
     CHECKSUM_LENGTH: int = field(default=2, init=False)
@@ -70,12 +72,12 @@ class DataPacket(Packet):
         header = num_data & self.NUM_DATA_ACCESS_MASK
 
         # Set the left most bit to the sequence number
-        header |= (seq_num << 15)
+        header |= seq_num << 15
 
         header_bytes = header.to_bytes(2, "big")
 
         if num_data > self.DATA_SIZE:
-            raise ValueError(f"Data too large. Cannot exceed {self.DATA_SIZE} bytes")
+            raise ValueError(f"Data too large ({num_data} bytes). Cannot exceed {self.DATA_SIZE} bytes")
 
         padding = bytes(self.FULL_SIZE - num_data - self.HEADER_LENGTH - self.CHECKSUM_LENGTH)
 
@@ -109,10 +111,11 @@ class DataPacket(Packet):
             print("Checksum detected error!!!")
             return None
 
+
 @dataclass(frozen=True)
 class AckPacket(Packet):
     ack_msg: bytes = field(default=bytes([0xAA]), init=False)
-    full_pkt: bytes = field(init=False) # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
+    full_pkt: bytes = field(init=False)  # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
 
     FULL_SIZE: int = field(default=4, init=False)
     CHECKSUM_LENGTH: int = field(default=2, init=False)

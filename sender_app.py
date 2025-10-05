@@ -1,6 +1,7 @@
 import argparse
 import os
 import socket as soc
+import time
 
 from constants import *
 from Packets import DataPacket
@@ -18,6 +19,14 @@ def make_data_pkt(data: bytes) -> list[DataPacket]:
     pkt_list = []
 
     seq_num = 0
+
+    # First packet sent will contain the number of data packets to follow
+    num_data_packets = num_full_pkts + 1
+    num_packets_bytes = num_data_packets.to_bytes(8, "big")
+    first_packet = DataPacket(num_packets_bytes, seq_num)
+    seq_num ^= 1
+
+    pkt_list.append(first_packet)
 
     # Extract the amount of data required per packet
     for i in range(num_full_pkts):
@@ -61,7 +70,7 @@ def handle_CLI() -> str:
     return args.input_file, args.scenario
 
 
-def send_image(bytes_image: bytes, scenario: int, loss: float) -> None:
+def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
     """Main loop that uses RDT 2.2 to send bytes to receiver"""
 
     # Create socket that will be used to send all packets
@@ -73,6 +82,8 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> None:
 
     data_idx = 0
 
+    start_time = time.time()
+
     # Sends all data packets
     while data_idx < len(data_packet_list):
         sender.rdt_send(data_packet_list[data_idx])
@@ -83,6 +94,24 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> None:
         if not resent:
             data_idx += 1
 
+    return start_time
+
+
+def write_time_file(scenario: int, loss: int, start_time: float) -> None:
+    results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+
+    if scenario == NO_LOSS:
+        time_file = "no_loss_start_times.txt"
+    elif scenario == TX_ACK_LOSS:
+        time_file = "tx_ack_loss_start_times.txt"
+    elif scenario == RX_DATA_LOSS:
+        time_file = "rx_data_loss_start_times.txt"
+
+    full_time_file_path = os.path.join(results_folder, time_file)
+
+    with open(full_time_file_path, "a") as f:
+        f.write(f"{loss},{start_time}\n")
+
 
 if __name__ == "__main__":
     # Process command line arguments
@@ -92,4 +121,6 @@ if __name__ == "__main__":
 
     # Iterate over loss rate between 0 to 60 percent with increments of 5
     for loss in range(0, 61, 5):
-        send_image(bytes_image, scenario, loss / 100)
+        start_time = send_image(bytes_image, scenario, loss / 100)
+        write_time_file(scenario, loss, start_time)
+        time.sleep(1)  # Wait a second between steps for things to settle

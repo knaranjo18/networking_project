@@ -61,7 +61,7 @@ def handle_CLI() -> str:
     return args.input_file, args.scenario
 
 
-def send_image(bytes_image: bytes) -> None:
+def send_image(bytes_image: bytes, scenario: int, loss: float) -> None:
     """Main loop that uses RDT 2.2 to send bytes to receiver"""
 
     # Create socket that will be used to send all packets
@@ -69,7 +69,7 @@ def send_image(bytes_image: bytes) -> None:
 
     data_packet_list = make_data_pkt(bytes_image)
 
-    sender = RDT22Sender(tx_soc)
+    sender = RDT22Sender(tx_soc, scenario, loss)
 
     data_idx = 0
 
@@ -90,4 +90,6 @@ if __name__ == "__main__":
 
     bytes_image = image_file_2_bytes(input_file)
 
-    send_image(bytes_image)
+    # Iterate over loss rate between 0 to 60 percent with increments of 5
+    for loss in range(0, 61, 5):
+        send_image(bytes_image, scenario, loss / 100)

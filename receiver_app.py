@@ -80,7 +80,7 @@ def handle_CLI() -> str:
     return args.output_file, args.scenario
 
 
-def write_time_file(scenario: int, loss: int, end_time: float) -> None:
+def write_time_file(scenario: int, iter: int, loss: int, end_time: float) -> None:
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
 
     if scenario == NO_LOSS:
@@ -93,7 +93,7 @@ def write_time_file(scenario: int, loss: int, end_time: float) -> None:
     full_time_file_path = os.path.join(results_folder, time_file)
 
     with open(full_time_file_path, "a") as f:
-        f.write(f"{loss},{end_time}\n")
+        f.write(f"{iter},{loss},{end_time}\n")
 
 
 if __name__ == "__main__":
@@ -101,8 +101,9 @@ if __name__ == "__main__":
 
     # Iterate over loss rate between 0 to 60 percent with increments of 5
     for loss in range(0, 61, 5):
-        image_bytes, end_time = receive_image(scenario, loss)
+        for iter in range(0, NUM_ITER):
+            image_bytes, end_time = receive_image(scenario, loss)
 
-        write_time_file(scenario, loss, end_time)
+            write_time_file(scenario, iter, loss, end_time)
 
-        save_bmp(image_bytes, f"{output_file}_{loss}_loss")
+            save_bmp(image_bytes, f"{output_file}_{loss}_loss")

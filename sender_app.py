@@ -97,7 +97,7 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
     return start_time
 
 
-def write_time_file(scenario: int, loss: int, start_time: float) -> None:
+def write_time_file(scenario: int, iter: int, loss: int, start_time: float) -> None:
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
 
     if scenario == NO_LOSS:
@@ -110,7 +110,7 @@ def write_time_file(scenario: int, loss: int, start_time: float) -> None:
     full_time_file_path = os.path.join(results_folder, time_file)
 
     with open(full_time_file_path, "a") as f:
-        f.write(f"{loss},{start_time}\n")
+        f.write(f"{iter},{loss},{start_time}\n")
 
 
 if __name__ == "__main__":
@@ -121,6 +121,7 @@ if __name__ == "__main__":
 
     # Iterate over loss rate between 0 to 60 percent with increments of 5
     for loss in range(0, 61, 5):
-        start_time = send_image(bytes_image, scenario, loss / 100)
-        write_time_file(scenario, loss, start_time)
-        time.sleep(1)  # Wait a second between steps for things to settle
+        for iter in range(0, NUM_ITER):
+            start_time = send_image(bytes_image, scenario, loss / 100)
+            write_time_file(scenario, iter, loss, start_time)
+            time.sleep(1)  # Wait a second between steps for things to settle

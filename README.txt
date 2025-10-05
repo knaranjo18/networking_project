@@ -48,18 +48,15 @@ Running the image transfer
 
 1. Open two terminals, going forward these will be called T1 and T2. 
 
-2. In T1, start the receiver application. You can specify the name you want to save the file as. If not name specified it will default to rx_img. 
-   You can also specify the data transfer scenario. 1 is no loss, 2 is ack loss, and 3 is data loss. 
+2. In T1, start the receiver application. You can specify the name you want to save the file as. If not name specified it will default to rx_img. You can also specify the data transfer scenario. 1 is no loss, 2 is ack loss, and 3 is data loss. 
 
     python3 receiver_app.py -o rx_test_image -s 1
 
-3. In T2, start the sender application. You can specify the name of the file you want to transmit. The data folder includes one test image, by default it will use this one.
-   You can also specify the data transfer scenario in the same way as step 2. 
+3. In T2, start the sender application. You can specify the name of the file you want to transmit. The data folder includes one test image, by default it will use this one. You can also specify the data transfer scenario in the same way as step 2. 
 
     python3 rdt1.0_sender.py -i megamind -s 1
 
-4. The sender and receiver will transfer the image a number of times specified by NUM_ITER in the constants.py file for each loss percentage step, 
-   these go from 0 to 60 with steps of 5. 
+4. The sender and receiver will transfer the image a number of times specified by NUM_ITER in the constants.py file for each loss percentage step, these go from 0 to 60 with steps of 5. 
 
 5. All the resulting images will be saved to the data folder.
 
@@ -70,8 +67,7 @@ Generating timing analysis plots
 
 1. Once a transfer scenario has been run, it should be produce a start times file and an end times file in the results folder.
 
-2. Run the plot generation script to analyze the times and generate loss vs completion time plots for a specified scenario. 
-   You can specify which scenario to plot with command line argument, 1 is no loss, 2 is ack loss, and 3 is data loss. 
+2. Run the plot generation script to analyze the times and generate loss vs completion time plots for a specified scenario. You can specify which scenario to plot with command line argument, 1 is no loss, 2 is ack loss, and 3 is data loss. 
 
    python3 generate_timing_plots -s 1
 

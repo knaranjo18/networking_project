@@ -8,16 +8,6 @@ from Packets import DataPacket
 from rdt22_receiver import RDT22Receiver
 
 
-def create_udp_soc() -> soc.socket:
-    """Create a UDP socket to listen on a port"""
-
-    rx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
-
-    rx_soc.bind((RX_ADDR, RX_PORT))
-
-    return rx_soc
-
-
 def combine_packets(packet_list: list[DataPacket]) -> bytes:
     """Extract the data from the packets to a form a continuous byte array"""
 
@@ -45,26 +35,28 @@ def save_bmp(data: bytes, output_name: str):
 
 
 def receive_image(scenario: int, loss_rate: float):
-    rx_soc = create_udp_soc()
 
-    receiver = RDT22Receiver(rx_soc, scenario, loss_rate)
+    rx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
+    with rx_soc:
+        rx_soc.bind((RX_ADDR, RX_PORT))
+        receiver = RDT22Receiver(rx_soc, scenario, loss_rate)
 
-    # First packet should say how many data packets expected
-    num_pkts = int.from_bytes(receiver.get_data_pkt().data, "big")
+        # First packet should say how many data packets expected
+        num_pkts = int.from_bytes(receiver.get_data_pkt().data, "big")
 
-    data_pkt_idx = 0
+        data_pkt_idx = 0
 
-    data_pkt_list = []
+        data_pkt_list: list[DataPacket] = []
 
-    while data_pkt_idx < num_pkts:
-        curr_pkt = receiver.get_data_pkt()
+        while data_pkt_idx < num_pkts:
+            curr_pkt = receiver.get_data_pkt()
 
-        if curr_pkt:
-            data_pkt_list.append(curr_pkt)
+            if curr_pkt:
+                data_pkt_list.append(curr_pkt)
 
-    end_time = time.time()
+        end_time = time.time()
 
-    return combine_packets(data_pkt_list), end_time
+        return combine_packets(data_pkt_list), end_time
 
 
 def handle_CLI() -> str:

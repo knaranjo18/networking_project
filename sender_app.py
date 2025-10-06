@@ -75,26 +75,28 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
 
     # Create socket that will be used to send all packets
     tx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
+    with tx_soc:
+        tx_soc.connect((TX_ADDR, TX_PORT))
 
-    data_packet_list = make_data_pkt(bytes_image)
+        data_packet_list = make_data_pkt(bytes_image)
 
-    sender = RDT22Sender(tx_soc, scenario, loss)
+        sender = RDT22Sender(tx_soc, scenario, loss)
 
-    data_idx = 0
+        data_idx = 0
 
-    start_time = time.time()
+        start_time = time.time()
 
-    # Sends all data packets
-    while data_idx < len(data_packet_list):
-        sender.rdt_send(data_packet_list[data_idx])
+        # Sends all data packets
+        while data_idx < len(data_packet_list):
+            sender.rdt_send(data_packet_list[data_idx])
 
-        resent = sender.input()
+            resent = sender.input()
 
-        # If we didn't resend data, send next data packet
-        if not resent:
-            data_idx += 1
+            # If we didn't resend data, send next data packet
+            if not resent:
+                data_idx += 1
 
-    return start_time
+        return start_time
 
 
 def write_time_file(scenario: int, iter: int, loss: int, start_time: float) -> None:

@@ -30,7 +30,11 @@ def make_data_pkt(data: bytes) -> list[DataPacket]:
 
     # Extract the amount of data required per packet
     for i in range(num_full_pkts):
-        pkt_list.append(DataPacket(data[i * DataPacket.DATA_SIZE : (i + 1) * DataPacket.DATA_SIZE], seq_num))
+        pkt_list.append(
+            DataPacket(
+                data[i * DataPacket.DATA_SIZE : (i + 1) * DataPacket.DATA_SIZE], seq_num
+            )
+        )
         seq_num ^= 1  # alternates between 0 and 1
 
     # Add the last packet with padding to get the full size
@@ -62,8 +66,19 @@ def handle_CLI() -> str:
 
     parser = argparse.ArgumentParser(description="Image sender with RDT 1.0 protocol")
 
-    parser.add_argument("-i", "--input_file", default="megamind", help="The name of the image to send (no extension)")
-    parser.add_argument("-s", "--scenario", default=1, type=int, help="Data transfer scenario to implement")
+    parser.add_argument(
+        "-i",
+        "--input_file",
+        default="megamind",
+        help="The name of the image to send (no extension)",
+    )
+    parser.add_argument(
+        "-s",
+        "--scenario",
+        default=1,
+        type=int,
+        help="Data transfer scenario to implement",
+    )
 
     args = parser.parse_args()
 

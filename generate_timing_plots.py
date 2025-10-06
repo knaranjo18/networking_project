@@ -11,7 +11,13 @@ def handle_CLI() -> str:
 
     parser = argparse.ArgumentParser(description="Image receiver with RDT 1.0 protocol")
 
-    parser.add_argument("-s", "--scenario", default=1, type=int, help="Data transfer scenario to implement")
+    parser.add_argument(
+        "-s",
+        "--scenario",
+        default=1,
+        type=int,
+        help="Data transfer scenario to implement",
+    )
 
     args = parser.parse_args()
 
@@ -38,7 +44,9 @@ def read_times_and_loss(file_name: str) -> dict[int, dict[int, list[int]]]:
     return time_loss_dict
 
 
-def get_time_diffs(start_time_loss: dict[int, list], end_time_loss: dict[int, list]) -> dict[int, int]:
+def get_time_diffs(
+    start_time_loss: dict[int, list], end_time_loss: dict[int, list]
+) -> dict[int, int]:
     """Given a start time dictionary and end time dictionary, calculate the average time difference for each loss level"""
     avg_diffs_dict = {}
 

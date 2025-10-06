@@ -35,7 +35,6 @@ def save_bmp(data: bytes, output_name: str):
 
 
 def receive_image(scenario: int, loss_rate: float):
-
     rx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
     with rx_soc:
         rx_soc.bind((RX_ADDR, RX_PORT))
@@ -64,8 +63,19 @@ def handle_CLI() -> str:
 
     parser = argparse.ArgumentParser(description="Image receiver with RDT 1.0 protocol")
 
-    parser.add_argument("-o", "--output_file", default="rx_img", help="The name to save the image as (no extension)")
-    parser.add_argument("-s", "--scenario", default=1, type=int, help="Data transfer scenario to implement")
+    parser.add_argument(
+        "-o",
+        "--output_file",
+        default="rx_img",
+        help="The name to save the image as (no extension)",
+    )
+    parser.add_argument(
+        "-s",
+        "--scenario",
+        default=1,
+        type=int,
+        help="Data transfer scenario to implement",
+    )
 
     args = parser.parse_args()
 

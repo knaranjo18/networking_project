@@ -54,8 +54,12 @@ class DataPacket(Packet):
     data: bytes  # actual data
     checksum: bytes  # checksum covers the header and the data
 
-    NUM_DATA_ACCESS_MASK: int = field(default=0x7FFF, init=False)  # Used for access num data value from first two bytes (can also be used to clear seq_num bit)
-    SEQ_NUM_ACCESS_MASK: int = field(default=1 << 15, init=False)  # Used for accessing seq_num from first two bytes
+    NUM_DATA_ACCESS_MASK: int = field(
+        default=0x7FFF, init=False
+    )  # Used for access num data value from first two bytes (can also be used to clear seq_num bit)
+    SEQ_NUM_ACCESS_MASK: int = field(
+        default=1 << 15, init=False
+    )  # Used for accessing seq_num from first two bytes
     FULL_SIZE: int = field(default=1024, init=False)
     HEADER_LENGTH: int = field(default=2, init=False)
     CHECKSUM_LENGTH: int = field(default=2, init=False)
@@ -77,9 +81,13 @@ class DataPacket(Packet):
         header_bytes = header.to_bytes(2, "big")
 
         if num_data > self.DATA_SIZE:
-            raise ValueError(f"Data too large ({num_data} bytes). Cannot exceed {self.DATA_SIZE} bytes")
+            raise ValueError(
+                f"Data too large ({num_data} bytes). Cannot exceed {self.DATA_SIZE} bytes"
+            )
 
-        padding = bytes(self.FULL_SIZE - num_data - self.HEADER_LENGTH - self.CHECKSUM_LENGTH)
+        padding = bytes(
+            self.FULL_SIZE - num_data - self.HEADER_LENGTH - self.CHECKSUM_LENGTH
+        )
 
         # The data that the checksum will be calculated over
         sumless_pkt = header_bytes + data + padding
@@ -115,7 +123,9 @@ class DataPacket(Packet):
 @dataclass(frozen=True)
 class AckPacket(Packet):
     ack_msg: bytes = field(default=bytes([0xAA]), init=False)
-    full_pkt: bytes = field(init=False)  # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
+    full_pkt: bytes = field(
+        init=False
+    )  # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
 
     FULL_SIZE: int = field(default=4, init=False)
     CHECKSUM_LENGTH: int = field(default=2, init=False)

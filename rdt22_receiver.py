@@ -72,10 +72,16 @@ class RDT22Receiver:
             return rx_bytes
         elif self.scenario == RX_DATA_LOSS:
             if random.random() < self.loss_rate:
-                corrupt_data = random.randint(0, 2 ** (8 * DataPacket.DATA_SIZE) - 1)  # random corrupt data packet
-                full_corrupt_data = rx_bytes[0:2] + corrupt_data.to_bytes(DataPacket.DATA_SIZE, "big") + rx_bytes[-2:]
+                corrupt_data = random.randint(
+                    0, 2 ** (8 * DataPacket.DATA_SIZE) - 1
+                )  # random corrupt data packet
+                full_corrupt_data = (
+                    rx_bytes[0:2]
+                    + corrupt_data.to_bytes(DataPacket.DATA_SIZE, "big")
+                    + rx_bytes[-2:]
+                )
                 return full_corrupt_data
             else:
                 return rx_bytes
         else:
-             raise NotImplementedError
+            raise NotImplementedError

@@ -79,11 +79,13 @@ class RDT22Sender:
                 corrupt_data = random.randint(0, 255)
                 if corrupt_data == 0xAA:
                     corrupt_data += 1
-                full_corrupt_ACK = bytes(rx_bytes[0]) + bytes([corrupt_data]) + rx_bytes[-2:]
+                full_corrupt_ACK = (
+                    bytes(rx_bytes[0]) + bytes([corrupt_data]) + rx_bytes[-2:]
+                )
                 return full_corrupt_ACK
             else:
                 return rx_bytes
         elif self.scenario == RX_DATA_LOSS:
             return rx_bytes
         else:
-             raise NotImplementedError
+            raise NotImplementedError

@@ -1,4 +1,3 @@
-
 def gen_checksum16(data: bytes) -> bytes:
     """Generates a 16 bit XOR based checksum for a byte array"""
 
@@ -11,12 +10,13 @@ def gen_checksum16(data: bytes) -> bytes:
 
     checksum = 0
     for i in range(0, num16_chunk):
-        chunk = int.from_bytes(data[2*i: 2*(i+1)], "big")
+        chunk = int.from_bytes(data[2 * i : 2 * (i + 1)], "big")
 
         # Running XOR
         checksum ^= chunk
 
     return checksum.to_bytes(2, "big")
+
 
 def check_checksum16(data: bytes, checksum: bytes) -> bool:
     """Verifies that data has no error by comparing checksum. If no errors then returns true."""

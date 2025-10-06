@@ -87,7 +87,10 @@ def handle_CLI() -> str:
     parser = argparse.ArgumentParser(description="Image sender with RDT 1.0 protocol")
 
     parser.add_argument(
-        "-i", "--input_file", default="megamind", help="The name of the image to send (no extension)"
+        "-i",
+        "--input_file",
+        default="megamind",
+        help="The name of the image to send (no extension)",
     )
 
     args = parser.parse_args()

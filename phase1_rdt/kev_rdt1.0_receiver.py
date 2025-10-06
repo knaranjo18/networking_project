@@ -98,7 +98,10 @@ def handle_CLI() -> str:
     parser = argparse.ArgumentParser(description="Image receiver with RDT 1.0 protocol")
 
     parser.add_argument(
-        "-o", "--output_file", default="rx_img", help="The name to save the image as (no extension)"
+        "-o",
+        "--output_file",
+        default="rx_img",
+        help="The name to save the image as (no extension)",
     )
 
     args = parser.parse_args()

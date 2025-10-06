@@ -9,17 +9,12 @@ WAIT_0 = 0
 WAIT_1 = 1
 
 
-# --- Stubs you should implement elsewhere ---
 def udt_rcv(sock: soc.socket) -> bytes:
-    raise NotImplementedError
+    return sock.recv(1024)
 
 
-def udt_send(sock: soc.socket, pkt: bytes): ...
-def is_corrupt(pkt: bytes) -> bool: ...
-def has_seq(pkt: bytes, seq: int): ...
-def extract_data(pkt: bytes) -> DataPacket: ...
-def deliver_data(data: bytes) -> bytes: ...
-def make_ack(seq: int) -> bytes: ...
+def udt_send(sock: soc.socket, pkt: bytes):
+    sock.sendto(pkt, (RX_ADDR, RX_PORT))
 
 
 class RDT22Receiver:
@@ -27,11 +22,11 @@ class RDT22Receiver:
         self.sock = sock
         self.state = WAIT_0
         self.once = False  # same as oncethru
-        self.last_ack: dict[int, bytes | None] = {0: None, 1: None}
+        self.last_ack: dict[int, AckPacket | None] = {0: None, 1: None}
         self.scenario = scenario
         self.loss_rate = loss_rate
 
-    def get_data_pkt(self) -> DataPacket:
+    def get_data_pkt(self) -> DataPacket | None:
         "Called by application to get received data, returns None if data is corrupted"
         rcvpkt = udt_rcv(self.sock)
 
@@ -39,10 +34,9 @@ class RDT22Receiver:
 
         if self.state == WAIT_0:
             if not Packet.is_corrupt(rcvpkt) and Packet.data_seq(rcvpkt) == 0:
-                data = extract_data(rcvpkt)
-                deliver_data(data)
-                ack = make_ack(0)
-                udt_send(self.sock, ack)
+                data = DataPacket.packet_from_bytes(rcvpkt)
+                ack = AckPacket(0)
+                udt_send(self.sock, ack.extract_data())
                 self.last_ack[0] = ack
                 self.once = True
                 self.state = WAIT_1
@@ -50,23 +44,22 @@ class RDT22Receiver:
                 return data
             else:  # corrupt or has_seq1
                 if self.once and self.last_ack[0]:
-                    udt_send(self.sock, self.last_ack[0])
+                    udt_send(self.sock, self.last_ack[0].extract_data())
 
                 return None
 
         elif self.state == WAIT_1:
-            if not is_corrupt(rcvpkt) and has_seq(rcvpkt, 1):
-                data = extract_data(rcvpkt)
-                deliver_data(data)
-                ack = make_ack(1)
-                udt_send(self.sock, ack)
+            if not Packet.is_corrupt(rcvpkt) and Packet.data_seq(rcvpkt) == 1:
+                data = DataPacket.packet_from_bytes(rcvpkt)
+                ack = AckPacket(1)
+                udt_send(self.sock, ack.extract_data())
                 self.last_ack[1] = ack
                 self.state = WAIT_0
 
                 return data
             else:  # corrupt or has_seq0
                 if self.last_ack[1]:
-                    udt_send(self.sock, self.last_ack[1])
+                    udt_send(self.sock, self.last_ack[1].extract_data())
 
                 return None
 
@@ -84,3 +77,5 @@ class RDT22Receiver:
                 return full_corrupt_data
             else:
                 return rx_bytes
+        else:
+             raise NotImplementedError

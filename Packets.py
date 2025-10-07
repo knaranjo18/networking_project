@@ -8,14 +8,15 @@ class Packet:
     seq_num: int  # Either 0 or 1
     # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
     # 1st bit of first byte is seq number, rest of first 2 bytes is # of data bytes + variable data length + optional padding + 2 bytes checksum
-    full_pkt: bytes = field(init=False)
+    full_pkt: bytes = field(
+        init=False
+    )  # subclasses set this; base provides static helpers
 
     # Check for data length/ack here too - Jesse
     @staticmethod
     def is_corrupt(pkt: bytes) -> bool:
         if len(pkt) <= 2:
             return True
-
         # Last two bytes are the checksum
         checksum = pkt[-2:]
         return not check_checksum16(pkt[0:-2], checksum)
@@ -23,7 +24,7 @@ class Packet:
     # Not sure if this is right - Jesse
     @staticmethod
     def is_ack(pkt: bytes) -> bool:
-        return pkt[1] == 0xAA and len(pkt) == 4
+        return len(pkt) == 4 and pkt[1] == 0xAA
 
     @staticmethod
     def is_data(pkt: bytes) -> bool:
@@ -32,20 +33,37 @@ class Packet:
     @staticmethod
     def ack_seq(pkt: bytes) -> int:
         if not Packet.is_ack(pkt):
-            return False
+            return -1
         return pkt[0]
 
     @staticmethod
     def data_seq(pkt: bytes) -> int:
-        if not Packet.is_data(pkt):
-            return False
-        return pkt[0] >> 7
+        if not Packet.is_data(pkt) or len(pkt) < 2:
+            return -1
+        header = int.from_bytes(pkt[0:2], "big")
+        return (header >> 15) & 0x1  # top bit
+
+    @staticmethod
+    def extract_data(pkt: bytes) -> bytes:
+        """
+        Extract payload from a DATA packet:
+        header (2 bytes: [seq|num_data15]) + payload(num_data) + padding + checksum(2)
+        """
+        if not Packet.is_data(pkt) or len(pkt) < 4:
+            return b""
+        header = int.from_bytes(pkt[0:2], "big")
+        num_data = header & DataPacket.NUM_DATA_ACCESS_MASK
+        # Defensive clamp in case of weird inputs
+        max_payload = max(0, len(pkt) - 4)
+        num_data = min(num_data, max_payload)
+        return pkt[2 : 2 + num_data]
+
+    @staticmethod
+    def make_ack(seq: int) -> bytes:
+        return AckPacket(seq).to_bytes()
 
     def get_seq(self) -> int:
         return self.seq_num
-
-    def extract_data(self) -> bytes:
-        return self.full_pkt
 
 
 @dataclass(frozen=True)
@@ -159,3 +177,7 @@ class AckPacket(Packet):
         else:
             print("Checksum detected error!!!")
             return None
+
+    # Convenience to get raw bytes from an AckPacket instance
+    def to_bytes(self) -> bytes:
+        return self.full_pkt

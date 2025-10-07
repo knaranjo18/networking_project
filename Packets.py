@@ -44,9 +44,23 @@ class Packet:
     def get_seq(self) -> int:
         return self.seq_num
 
-    def extract_data(self) -> bytes:
-        return self.full_pkt
+    @staticmethod
+    def extract_data(pkt: bytes) -> bytes:
+        """
+        Extract payload from a DATA packet:
+        header (2 bytes: [seq|num_data15]) + payload(num_data) + padding + checksum(2)
+        """
+        if not Packet.is_data(pkt) or len(pkt) < 4:
+            return b""
+        header = int.from_bytes(pkt[0:2], "big")
+        num_data = header & DataPacket.NUM_DATA_ACCESS_MASK
+        max_payload = max(0, len(pkt) - 4)
+        num_data = min(num_data, max_payload)
+        return pkt[2 : 2 + num_data]
 
+    @staticmethod
+    def make_ack(seq: int) -> bytes:
+        return AckPacket(seq).to_bytes()
 
 @dataclass(frozen=True)
 class DataPacket(Packet):
@@ -159,3 +173,6 @@ class AckPacket(Packet):
         else:
             print("Checksum detected error!!!")
             return None
+            
+    def to_bytes(self) -> bytes:
+        return self.full_pkt

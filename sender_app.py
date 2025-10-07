@@ -116,7 +116,7 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
 
 def write_time_file(scenario: int, iter: int, loss: int, start_time: float) -> None:
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
-
+    os.makedirs(results_folder, exist_ok=True) ##added to avoid errors of non existent directory
     if scenario == NO_LOSS:
         time_file = "no_loss_start_times.txt"
     elif scenario == TX_ACK_LOSS:

@@ -64,6 +64,7 @@ class RDT22Receiver:
         Returns a DataPacket or None if the received packet was corrupt/out-of-order.
         """
         rcvpkt = udt_rcv(self.sock)
+        print("Checksum valid?", not Packet.is_corrupt(rcvpkt))
         rcvpkt = self.__corrupt_data_bytes(rcvpkt)
 
         if self.state == WAIT_0:

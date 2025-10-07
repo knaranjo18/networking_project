@@ -54,7 +54,7 @@ Running the image transfer
 
 3. In T2, start the sender application. You can specify the name of the file you want to transmit. The data folder includes one test image, by default it will use this one. You can also specify the data transfer scenario in the same way as step 2. 
 
-    python3 rdt1.0_sender.py -i megamind -s 1
+    python3 sender_app.py -i megamind -s 1
 
 4. The sender and receiver will transfer the image a number of times specified by NUM_ITER in the constants.py file for each loss percentage step, these go from 0 to 60 with steps of 5. 
 

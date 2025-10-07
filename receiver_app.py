@@ -8,104 +8,64 @@ from Packets import DataPacket
 from rdt22_receiver import RDT22Receiver
 
 
-def combine_packets(packet_list: list[DataPacket]) -> bytes:
-    """Extract the data from the packets to a form a continuous byte array"""
-
-    combined_bytes = b""
-
-    # Extracts only the data from the packets
-    for packet in packet_list:
-        combined_bytes += packet.data
-
-    return combined_bytes
-
-
-def save_bmp(data: bytes, output_name: str):
-    """Save an array of bytes to a BMP file on disk"""
-
-    # Get image path
-    data_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-    full_img_path = os.path.join(data_folder, output_name)
-
-    print(f"Saving image to: {full_img_path}.bmp")
-
-    # Write the image to file
-    with open(f"{full_img_path}.bmp", "wb") as img_file:
-        img_file.write(data)
-
-
-def receive_image(scenario: int, loss_rate: float):
-    rx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
-    with rx_soc:
-        rx_soc.bind((RX_ADDR, RX_PORT))
-        receiver = RDT22Receiver(rx_soc, scenario, loss_rate)
-
-        # First packet should say how many data packets expected
-        num_pkts = int.from_bytes(receiver.get_data_pkt().data, "big")
-
-        data_pkt_idx = 0
-
-        data_pkt_list: list[DataPacket] = []
-
-        while data_pkt_idx < num_pkts:
-            curr_pkt = receiver.get_data_pkt()
-
-            if curr_pkt:
-                data_pkt_list.append(curr_pkt)
-
-        end_time = time.time()
-
-        return combine_packets(data_pkt_list), end_time
-
-
-def handle_CLI() -> str:
-    "Reads command line arguments to get the output file name"
-
-    parser = argparse.ArgumentParser(description="Image receiver with RDT 1.0 protocol")
-
-    parser.add_argument(
-        "-o",
-        "--output_file",
-        default="rx_img",
-        help="The name to save the image as (no extension)",
-    )
-    parser.add_argument(
-        "-s",
-        "--scenario",
-        default=1,
-        type=int,
-        help="Data transfer scenario to implement",
-    )
-
+def handle_CLI():
+    """Reads command line arguments to get output file name and scenario."""
+    parser = argparse.ArgumentParser(description="Image receiver with RDT 2.2 protocol")
+    parser.add_argument("-o", "--output_file", default="rx_image", help="Output image base name (no extension)")
+    parser.add_argument("-s", "--scenario", default=1, type=int, help="Data transfer scenario to implement")
     args = parser.parse_args()
-
     return args.output_file, args.scenario
 
 
-def write_time_file(scenario: int, iter: int, loss: int, end_time: float) -> None:
-    results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+def receive_image(scenario: int, loss: float):
+    """Receives an image over RDT 2.2. Returns (image_bytes, end_time)."""
+    # Normalize loss to 0..1 if needed
+    loss_rate = loss if 0.0 <= loss <= 1.0 else max(0.0, min(1.0, loss / 100.0))
 
-    if scenario == NO_LOSS:
-        time_file = "no_loss_end_times.txt"
-    elif scenario == TX_ACK_LOSS:
-        time_file = "tx_ack_loss_end_times.txt"
-    elif scenario == RX_DATA_LOSS:
-        time_file = "rx_data_loss_end_times.txt"
+    # Bind UDP socket to receiver address/port
+    rx_sock = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
+    rx_sock.setsockopt(soc.SOL_SOCKET, soc.SO_REUSEADDR, 1)
+    rx_sock.bind((RX_ADDR, RX_PORT))
 
-    full_time_file_path = os.path.join(results_folder, time_file)
+    receiver = RDT22Receiver(rx_sock, scenario, loss_rate)
 
-    with open(full_time_file_path, "a") as f:
-        f.write(f"{iter},{loss},{end_time}\n")
+    # --- First packet: number of data packets to follow (8 bytes, big-endian) ---
+    first_pkt = None
+    while first_pkt is None:
+        first_pkt = receiver.get_data_pkt()
+    num_pkts = int.from_bytes(first_pkt.data, "big")
+
+    # --- Receive the data packets ---
+    data_pkt_list: list[DataPacket] = []
+    data_pkt_idx = 0
+    while data_pkt_idx < num_pkts:
+        pkt = receiver.get_data_pkt()
+        if pkt is not None:
+            data_pkt_list.append(pkt)
+            data_pkt_idx += 1  # <-- critical fix: advance the index
+
+    # Reassemble payload
+    image_bytes = b"".join(p.data for p in data_pkt_list)
+    end_time = time.time()
+    rx_sock.close()
+    return image_bytes, end_time
+
+
+def write_image_file(output_name: str, image_bytes: bytes):
+    """Writes received bytes to ./data/<output_name>.bmp"""
+    data_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+    os.makedirs(data_folder, exist_ok=True)
+    out_path = os.path.join(data_folder, f"{output_name}.bmp")
+    with open(out_path, "wb") as f:
+        f.write(image_bytes)
+    print(f"Saved image to: {out_path} ({len(image_bytes)} bytes)")
 
 
 if __name__ == "__main__":
     output_file, scenario = handle_CLI()
 
-    # Iterate over loss rate between 0 to 60 percent with increments of 5
-    for loss in range(0, 61, 5):
-        for iter in range(0, NUM_ITER):
-            image_bytes, end_time = receive_image(scenario, loss)
-
-            write_time_file(scenario, iter, loss, end_time)
-
-            save_bmp(image_bytes, f"{output_file}_{loss}_loss")
+    # Single receive (you can loop losses externally if desired)
+    # If your workflow expects sweep, wrap in a for-range like sender does.
+    loss = 0  # start with no loss for receiver side by default
+    image_bytes, end_time = receive_image(scenario, loss)
+    write_image_file(output_file, image_bytes)

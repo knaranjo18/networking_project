@@ -8,14 +8,13 @@ class Packet:
     seq_num: int  # Either 0 or 1
     # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
     # 1st bit of first byte is seq number, rest of first 2 bytes is # of data bytes + variable data length + optional padding + 2 bytes checksum
-    full_pkt: bytes = field(init=False)
+    full_pkt: bytes = field(init=False)  # subclasses set this; base provides static helpers
 
     # Check for data length/ack here too - Jesse
     @staticmethod
     def is_corrupt(pkt: bytes) -> bool:
         if len(pkt) <= 2:
             return True
-
         # Last two bytes are the checksum
         checksum = pkt[-2:]
         return not check_checksum16(pkt[0:-2], checksum)
@@ -23,7 +22,7 @@ class Packet:
     # Not sure if this is right - Jesse
     @staticmethod
     def is_ack(pkt: bytes) -> bool:
-        return pkt[1] == 0xAA and len(pkt) == 4
+        return len(pkt) == 4 and pkt[1] == 0xAA
 
     @staticmethod
     def is_data(pkt: bytes) -> bool:
@@ -32,17 +31,15 @@ class Packet:
     @staticmethod
     def ack_seq(pkt: bytes) -> int:
         if not Packet.is_ack(pkt):
-            return False
+            return -1
         return pkt[0]
 
     @staticmethod
     def data_seq(pkt: bytes) -> int:
-        if not Packet.is_data(pkt):
-            return False
-        return pkt[0] >> 7
-
-    def get_seq(self) -> int:
-        return self.seq_num
+        if not Packet.is_data(pkt) or len(pkt) < 2:
+            return -1
+        header = int.from_bytes(pkt[0:2], "big")
+        return (header >> 15) & 0x1  # top bit
 
     @staticmethod
     def extract_data(pkt: bytes) -> bytes:
@@ -54,13 +51,18 @@ class Packet:
             return b""
         header = int.from_bytes(pkt[0:2], "big")
         num_data = header & DataPacket.NUM_DATA_ACCESS_MASK
+        # Defensive clamp in case of weird inputs
         max_payload = max(0, len(pkt) - 4)
         num_data = min(num_data, max_payload)
-        return pkt[2 : 2 + num_data]
+        return pkt[2:2 + num_data]
 
     @staticmethod
     def make_ack(seq: int) -> bytes:
         return AckPacket(seq).to_bytes()
+
+    def get_seq(self) -> int:
+        return self.seq_num
+
 
 @dataclass(frozen=True)
 class DataPacket(Packet):
@@ -68,12 +70,8 @@ class DataPacket(Packet):
     data: bytes  # actual data
     checksum: bytes  # checksum covers the header and the data
 
-    NUM_DATA_ACCESS_MASK: int = field(
-        default=0x7FFF, init=False
-    )  # Used for access num data value from first two bytes (can also be used to clear seq_num bit)
-    SEQ_NUM_ACCESS_MASK: int = field(
-        default=1 << 15, init=False
-    )  # Used for accessing seq_num from first two bytes
+    NUM_DATA_ACCESS_MASK: int = field(default=0x7FFF, init=False)  # Used for access num data value from first two bytes (can also be used to clear seq_num bit)
+    SEQ_NUM_ACCESS_MASK: int = field(default=1 << 15, init=False)  # Used for accessing seq_num from first two bytes
     FULL_SIZE: int = field(default=1024, init=False)
     HEADER_LENGTH: int = field(default=2, init=False)
     CHECKSUM_LENGTH: int = field(default=2, init=False)
@@ -95,13 +93,9 @@ class DataPacket(Packet):
         header_bytes = header.to_bytes(2, "big")
 
         if num_data > self.DATA_SIZE:
-            raise ValueError(
-                f"Data too large ({num_data} bytes). Cannot exceed {self.DATA_SIZE} bytes"
-            )
+            raise ValueError(f"Data too large ({num_data} bytes). Cannot exceed {self.DATA_SIZE} bytes")
 
-        padding = bytes(
-            self.FULL_SIZE - num_data - self.HEADER_LENGTH - self.CHECKSUM_LENGTH
-        )
+        padding = bytes(self.FULL_SIZE - num_data - self.HEADER_LENGTH - self.CHECKSUM_LENGTH)
 
         # The data that the checksum will be calculated over
         sumless_pkt = header_bytes + data + padding
@@ -120,7 +114,7 @@ class DataPacket(Packet):
         # Grab the remaining 15 bits of the header as the number of data bytes
         num_data = header & DataPacket.NUM_DATA_ACCESS_MASK
 
-        data = in_bytes[2 : 2 + num_data]
+        data = in_bytes[2:2 + num_data]
 
         # Last two bytes are the checksum
         checksum = in_bytes[-2:]
@@ -137,9 +131,7 @@ class DataPacket(Packet):
 @dataclass(frozen=True)
 class AckPacket(Packet):
     ack_msg: bytes = field(default=bytes([0xAA]), init=False)
-    full_pkt: bytes = field(
-        init=False
-    )  # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
+    full_pkt: bytes = field(init=False)  # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
 
     FULL_SIZE: int = field(default=4, init=False)
     CHECKSUM_LENGTH: int = field(default=2, init=False)
@@ -173,6 +165,7 @@ class AckPacket(Packet):
         else:
             print("Checksum detected error!!!")
             return None
-            
+
+    # Convenience to get raw bytes from an AckPacket instance
     def to_bytes(self) -> bytes:
         return self.full_pkt

@@ -91,8 +91,6 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
     # Create socket that will be used to send all packets
     tx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
     with tx_soc:
-        tx_soc.connect((TX_ADDR, TX_PORT))
-
         data_packet_list = make_data_pkt(bytes_image)
 
         sender = RDT22Sender(tx_soc, scenario, loss)

@@ -49,9 +49,10 @@ def receive_image(scenario: int, loss_rate: float):
 
         while data_pkt_idx < num_pkts:
             curr_pkt = receiver.get_data_pkt()
-
+            
             if curr_pkt:
                 data_pkt_list.append(curr_pkt)
+                data_pkt_idx += 1
 
         end_time = time.time()
 
@@ -84,6 +85,7 @@ def handle_CLI() -> str:
 
 def write_time_file(scenario: int, iter: int, loss: int, end_time: float) -> None:
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+    os.makedirs(results_folder, exist_ok=True)
 
     if scenario == NO_LOSS:
         time_file = "no_loss_end_times.txt"

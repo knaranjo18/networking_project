@@ -8,13 +8,21 @@ from Packets import AckPacket, DataPacket, Packet
 WAIT_0 = 0
 WAIT_1 = 1
 
+# remember where the last DATA came from so we can reply ACKs to that address
+_last_sender_addr: tuple[str, int] | None = None
+
 
 def udt_rcv(sock: soc.socket) -> bytes:
-    return sock.recv(1024)
+    data, addr = sock.recvfrom(2048)  # use recvfrom on UDP
+    global _last_sender_addr
+    _last_sender_addr = addr
+    return data
 
 
 def udt_send(sock: soc.socket, pkt: bytes):
-    sock.sendto(pkt, (RX_ADDR, RX_PORT))
+    # send ACKs back to the most recent sender (not RX_ADDR/RX_PORT)
+    if _last_sender_addr is not None:
+        sock.sendto(pkt, _last_sender_addr)
 
 
 class RDT22Receiver:
@@ -24,7 +32,8 @@ class RDT22Receiver:
         self.once = False  # same as oncethru
         self.last_ack: dict[int, AckPacket | None] = {0: None, 1: None}
         self.scenario = scenario
-        self.loss_rate = loss_rate
+        # normalize to 0..1 if 0..100 was passed
+        self.loss_rate = loss_rate if 0.0 <= loss_rate <= 1.0 else max(0.0, min(1.0, loss_rate / 100.0))
 
     def get_data_pkt(self) -> DataPacket | None:
         "Called by application to get received data, returns None if data is corrupted"
@@ -36,7 +45,7 @@ class RDT22Receiver:
             if not Packet.is_corrupt(rcvpkt) and Packet.data_seq(rcvpkt) == 0:
                 data = DataPacket.packet_from_bytes(rcvpkt)
                 ack = AckPacket(0)
-                udt_send(self.sock, ack.extract_data())
+                udt_send(self.sock, ack.to_bytes())  # was ack.extract_data()
                 self.last_ack[0] = ack
                 self.once = True
                 self.state = WAIT_1
@@ -44,23 +53,21 @@ class RDT22Receiver:
                 return data
             else:  # corrupt or has_seq1
                 if self.once and self.last_ack[0]:
-                    udt_send(self.sock, self.last_ack[0].extract_data())
-
+                    udt_send(self.sock, self.last_ack[0].to_bytes())  # was extract_data()
                 return None
 
         elif self.state == WAIT_1:
             if not Packet.is_corrupt(rcvpkt) and Packet.data_seq(rcvpkt) == 1:
                 data = DataPacket.packet_from_bytes(rcvpkt)
                 ack = AckPacket(1)
-                udt_send(self.sock, ack.extract_data())
+                udt_send(self.sock, ack.to_bytes())  # was ack.extract_data()
                 self.last_ack[1] = ack
                 self.state = WAIT_0
 
                 return data
             else:  # corrupt or has_seq0
                 if self.last_ack[1]:
-                    udt_send(self.sock, self.last_ack[1].extract_data())
-
+                    udt_send(self.sock, self.last_ack[1].to_bytes())  # was extract_data()
                 return None
 
     def __corrupt_data_bytes(self, rx_bytes: bytes) -> bytes:

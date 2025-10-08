@@ -12,8 +12,9 @@ WAIT_ACK_1 = 3
 
 
 def udt_rcv(sock: soc.socket) -> bytes:
-    return sock.recv(1024)
-
+    # Use recvfrom on UDP (works without connect())
+    data, _ = sock.recvfrom(1024)
+    return data
 
 def udt_send(sock: soc.socket, pkt: bytes):
     sock.sendto(pkt, (RX_ADDR, RX_PORT))
@@ -22,29 +23,39 @@ def udt_send(sock: soc.socket, pkt: bytes):
 class RDT22Sender:
     def __init__(self, sock: soc.socket, scenario: int, loss_rate: float):
         self.sock = sock
+        self.sock.settimeout(0.5)  # resend if no ACK within 500 ms
         self.state = WAIT_CALL_0
         self.last_pkt: DataPacket | None = None  # buffer last sent packet
         self.scenario = scenario
-        self.loss_rate = loss_rate
+        # Normalize loss_rate to 0..1 if user passes 0..100
+        self.loss_rate = loss_rate if 0.0 <= loss_rate <= 1.0 else max(0.0, min(1.0, loss_rate / 100.0))
 
     def rdt_send(self, curr_packet: DataPacket):
         """Called by application to send one chunk of data"""
         if self.state == WAIT_CALL_0:
             self.last_pkt = curr_packet
-            udt_send(self.sock, self.last_pkt.extract_data())
-            self.statestate = WAIT_ACK_0
+            udt_send(self.sock, self.last_pkt.full_pkt)
+            self.state = WAIT_ACK_0
 
         elif self.state == WAIT_CALL_1:
             self.last_pkt = curr_packet
-            udt_send(self.sock, self.last_pkt.extract_data())
+            udt_send(self.sock, self.last_pkt.full_pkt)
             self.state = WAIT_ACK_1
+
         else:
             # If app calls at wrong time, ignore or block until ready
             pass
 
     def input(self) -> bool:
         """Called when a packet arrives from receiver"""
-        rcvpkt = udt_rcv(self.sock)
+        try:
+            rcvpkt = udt_rcv(self.sock)
+        except soc.timeout:
+            # Treat timeout as lost ACK -> resend last packet
+            if self.last_pkt is not None:
+                udt_send(self.sock, self.last_pkt.full_pkt)
+                return True
+            return False
 
         rcvpkt = self.__corrupt_ACK_bytes(rcvpkt)
 
@@ -57,14 +68,14 @@ class RDT22Sender:
             if not Packet.is_corrupt(rcvpkt) and Packet.ack_seq(rcvpkt) == 0:
                 self.state = WAIT_CALL_1
             else:  # corrupt or wrong ACK
-                udt_send(self.sock, self.last_pkt.extract_data())
+                udt_send(self.sock, self.last_pkt.full_pkt)
                 resent = True
 
         elif self.state == WAIT_ACK_1:
             if not Packet.is_corrupt(rcvpkt) and Packet.ack_seq(rcvpkt) == 1:
                 self.state = WAIT_CALL_0
             else:  # corrupt or wrong ACK
-                udt_send(self.sock, self.last_pkt.extract_data())
+                udt_send(self.sock, self.last_pkt.full_pkt)
                 resent = True
 
         return resent
@@ -75,14 +86,12 @@ class RDT22Sender:
         if self.scenario == NO_LOSS:
             return rx_bytes
         elif self.scenario == TX_ACK_LOSS:
-            if random.random() < self.loss_rate:
-                corrupt_data = random.randint(0, 255)
-                if corrupt_data == 0xAA:
-                    corrupt_data += 1
-                full_corrupt_ACK = (
-                    bytes(rx_bytes[0]) + bytes([corrupt_data]) + rx_bytes[-2:]
-                )
-                return full_corrupt_ACK
+            if random.random() < self.loss_rate and len(rx_bytes) >= 3:
+                # Flip a single bit in the middle (keeps length; breaks checksum)
+                ba = bytearray(rx_bytes)
+                mid = len(ba) // 2
+                ba[mid] ^= 0x01
+                return bytes(ba)
             else:
                 return rx_bytes
         elif self.scenario == RX_DATA_LOSS:

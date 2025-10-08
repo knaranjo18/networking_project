@@ -70,25 +70,24 @@ class RDT22Receiver:
                     udt_send(self.sock, self.last_ack[1].to_bytes())  # was extract_data()
                 return None
 
-    def __corrupt_data_bytes(self, rx_bytes: bytes) -> bytes:
-        """Randomly corrupts data packets depending on the scenario and loss rate"""
-
-        if self.scenario == NO_LOSS:
-            return rx_bytes
-        elif self.scenario == TX_ACK_LOSS:
-            return rx_bytes
-        elif self.scenario == RX_DATA_LOSS:
-            if random.random() < self.loss_rate:
-                corrupt_data = random.randint(
-                    0, 2 ** (8 * DataPacket.DATA_SIZE) - 1
-                )  # random corrupt data packet
-                full_corrupt_data = (
-                    rx_bytes[0:2]
-                    + corrupt_data.to_bytes(DataPacket.DATA_SIZE, "big")
-                    + rx_bytes[-2:]
-                )
-                return full_corrupt_data
-            else:
-                return rx_bytes
-        else:
-            raise NotImplementedError
+def __corrupt_data_bytes(self, rx_bytes: bytes) -> bytes:
+                """Randomly corrupts data packets depending on the scenario and loss rate"""
+            
+                if self.scenario == NO_LOSS:
+                    return rx_bytes
+                elif self.scenario == TX_ACK_LOSS:
+                    return rx_bytes
+                elif self.scenario == RX_DATA_LOSS:
+                    if random.random() < self.loss_rate and len(rx_bytes) >= 4:
+                        # Flip a single bit in the DATA area.
+                        # Avoid the 2-byte header [0:2] and the 2-byte checksum [-2:].
+                        ba = bytearray(rx_bytes)
+                        # pick a middle index within the data/padding region
+                        i = max(2, min(len(ba) - 3, 2 + (len(ba) - 4) // 2))
+                        ba[i] ^= 0x01
+                        return bytes(ba)
+                    else:
+                        return rx_bytes
+                else:
+                    raise NotImplementedError
+            

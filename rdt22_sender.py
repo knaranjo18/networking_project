@@ -53,7 +53,7 @@ class RDT22Sender:
         except soc.timeout:
             # Treat timeout as lost ACK -> resend last packet
             if self.last_pkt is not None:
-                print("[TX] resend (timeout); state=", self.state)
+                #print("[TX] resend (timeout); state=", self.state)
                 udt_send(self.sock, self.last_pkt.full_pkt)
                 return True
             return False
@@ -69,7 +69,7 @@ class RDT22Sender:
             if not Packet.is_corrupt(rcvpkt) and Packet.ack_seq(rcvpkt) == 0:
                 self.state = WAIT_CALL_1
             else:  # corrupt or wrong ACK
-                print("[TX] resend (bad ACK for seq0); state=", self.state)
+                #print("[TX] resend (bad ACK for seq0); state=", self.state)
                 udt_send(self.sock, self.last_pkt.full_pkt)
                 resent = True
 
@@ -77,7 +77,7 @@ class RDT22Sender:
             if not Packet.is_corrupt(rcvpkt) and Packet.ack_seq(rcvpkt) == 1:
                 self.state = WAIT_CALL_0
             else:  # corrupt or wrong ACK
-                print("[TX] resend (bad ACK for seq1); state=", self.state)
+                #print("[TX] resend (bad ACK for seq1); state=", self.state)
                 udt_send(self.sock, self.last_pkt.full_pkt)
                 resent = True
 

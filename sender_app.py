@@ -91,6 +91,8 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
     # Create socket that will be used to send all packets
     tx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
     with tx_soc:
+        # (Minimal change) Removed UDP connect; rdt22_sender uses recvfrom() for ACKs
+
         data_packet_list = make_data_pkt(bytes_image)
 
         sender = RDT22Sender(tx_soc, scenario, loss)
@@ -114,6 +116,7 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
 
 def write_time_file(scenario: int, iter: int, loss: int, start_time: float) -> None:
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+    os.makedirs(results_folder, exist_ok=True)  # <-- ensure folder exists
 
     if scenario == NO_LOSS:
         time_file = "no_loss_start_times.txt"

@@ -44,8 +44,27 @@ class Packet:
     def get_seq(self) -> int:
         return self.seq_num
 
-    def extract_data(self) -> bytes:
-        return self.full_pkt
+    # --- CHANGED: make extract_data a static parser over raw bytes ---
+    @staticmethod
+    def extract_data(pkt: bytes) -> bytes:
+        """
+        Extract payload from a DATA packet:
+        header (2 bytes: [seq|num_data15]) + payload(num_data) + padding + checksum(2)
+        """
+        if not Packet.is_data(pkt) or len(pkt) < 4:
+            return b""
+        header = int.from_bytes(pkt[0:2], "big")
+        # lower 15 bits are num_data
+        num_data = header & DataPacket.NUM_DATA_ACCESS_MASK
+        # defensive clamp in case of malformed input
+        max_payload = max(0, len(pkt) - 4)
+        num_data = min(num_data, max_payload)
+        return pkt[2 : 2 + num_data]
+
+    # --- NEW: convenience to build ACK bytes ---
+    @staticmethod
+    def make_ack(seq: int) -> bytes:
+        return AckPacket(seq).to_bytes()
 
 
 @dataclass(frozen=True)
@@ -159,3 +178,7 @@ class AckPacket(Packet):
         else:
             print("Checksum detected error!!!")
             return None
+
+    # NEW: expose raw bytes for convenience
+    def to_bytes(self) -> bytes:
+        return self.full_pkt

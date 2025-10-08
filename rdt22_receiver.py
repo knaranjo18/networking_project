@@ -39,35 +39,48 @@ class RDT22Receiver:
         "Called by application to get received data, returns None if data is corrupted"
         rcvpkt = udt_rcv(self.sock)
 
+        #  debug:
+        # print(f"[RX] scenario={self.scenario} loss={self.loss_rate:.2f}")
+
         rcvpkt = self.__corrupt_data_bytes(rcvpkt)
 
         if self.state == WAIT_0:
             if not Packet.is_corrupt(rcvpkt) and Packet.data_seq(rcvpkt) == 0:
                 data = DataPacket.packet_from_bytes(rcvpkt)
+                if data is None:
+                    # Treat parse failure like corruption: resend last ACK1 (last good when WAIT_0)
+                    if self.last_ack[1]:
+                        udt_send(self.sock, self.last_ack[1].to_bytes())
+                    return None
+
                 ack = AckPacket(0)
-                udt_send(self.sock, ack.to_bytes())  # was ack.extract_data()
+                udt_send(self.sock, ack.to_bytes())
                 self.last_ack[0] = ack
                 self.once = True
                 self.state = WAIT_1
-
                 return data
-            else:  # corrupt or has_seq1
-                if self.once and self.last_ack[0]:
-                    udt_send(self.sock, self.last_ack[0].to_bytes())  # was extract_data()
+            else:  # corrupt or seq=1 while waiting for 0 -> resend last good ACK1
+                if self.last_ack[1]:
+                    udt_send(self.sock, self.last_ack[1].to_bytes())
                 return None
 
         elif self.state == WAIT_1:
             if not Packet.is_corrupt(rcvpkt) and Packet.data_seq(rcvpkt) == 1:
                 data = DataPacket.packet_from_bytes(rcvpkt)
+                if data is None:
+                    # Treat parse failure like corruption: resend last good ACK0 (last good when WAIT_1)
+                    if self.last_ack[0]:
+                        udt_send(self.sock, self.last_ack[0].to_bytes())
+                    return None
+
                 ack = AckPacket(1)
-                udt_send(self.sock, ack.to_bytes())  # was ack.extract_data()
+                udt_send(self.sock, ack.to_bytes())
                 self.last_ack[1] = ack
                 self.state = WAIT_0
-
                 return data
-            else:  # corrupt or has_seq0
-                if self.last_ack[1]:
-                    udt_send(self.sock, self.last_ack[1].to_bytes())  # was extract_data()
+            else:  # corrupt or seq=0 while waiting for 1 -> resend last good ACK0
+                if self.last_ack[0]:
+                    udt_send(self.sock, self.last_ack[0].to_bytes())
                 return None
 
     def __corrupt_data_bytes(self, rx_bytes: bytes) -> bytes:
@@ -84,6 +97,7 @@ class RDT22Receiver:
                 # pick a middle index within the data/padding region
                 i = max(2, min(len(ba) - 3, 2 + (len(ba) - 4) // 2))
                 ba[i] ^= 0x01
+                # print("[RX] CORRUPTED one DATA pkt")  # DEBUG
                 return bytes(ba)
             else:
                 return rx_bytes

@@ -45,7 +45,6 @@ class RDT22Receiver:
             if not Packet.is_corrupt(rcvpkt) and Packet.data_seq(rcvpkt) == 0:
                 data = DataPacket.packet_from_bytes(rcvpkt)
                 ack = AckPacket(0)
-                # print("Good receipt: Sending ACK for 0")
                 udt_send(self.sock, ack.to_bytes())  # was ack.extract_data()
                 self.last_ack = ack
                 self.once = True
@@ -54,10 +53,8 @@ class RDT22Receiver:
                 return data
             else:  # corrupt or has_seq1
                 if self.once and self.last_ack:
-                    # print(f"Bad ACK for 0, resending {self.last_ack.seq_num}")
                     udt_send(self.sock, self.last_ack.to_bytes())  # was extract_data()
                 else:
-                    # print("sent fake ack")
                     fake_ack = AckPacket(1)
                     udt_send(self.sock, fake_ack.to_bytes())
                 return None
@@ -66,7 +63,6 @@ class RDT22Receiver:
             if not Packet.is_corrupt(rcvpkt) and Packet.data_seq(rcvpkt) == 1:
                 data = DataPacket.packet_from_bytes(rcvpkt)
                 ack = AckPacket(1)
-                # print("Good receipt: Sending ACK for 1")
                 udt_send(self.sock, ack.to_bytes())  # was ack.extract_data()
                 self.last_ack = ack
                 self.state = WAIT_0
@@ -74,10 +70,8 @@ class RDT22Receiver:
                 return data
             else:  # corrupt or has_seq0
                 if self.last_ack:
-                    # print(f"Bad ACK for 1, resending {self.last_ack.seq_num}")
                     udt_send(self.sock, self.last_ack.to_bytes())  # was extract_data()
                 else:
-                    # print("sent fake ack")
                     fake_ack = AckPacket(0)
                     udt_send(self.sock, fake_ack.to_bytes())
                 return None
@@ -90,9 +84,7 @@ class RDT22Receiver:
         elif self.scenario == TX_ACK_LOSS:
             return rx_bytes
         elif self.scenario == RX_DATA_LOSS:
-            x = random.random()
-            if x < self.loss_rate:
-                # print(f"corrupting because {x} < {self.loss_rate}")
+            if random.random() < self.loss_rate:
                 corrupt_data = random.randint(0, 2 ** (8 * DataPacket.DATA_SIZE) - 1)  # random corrupt data packet
                 full_corrupt_data = rx_bytes[0:2] + corrupt_data.to_bytes(DataPacket.DATA_SIZE, "big") + rx_bytes[-2:]
                 return full_corrupt_data

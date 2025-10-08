@@ -99,8 +99,6 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
 
         # Sends all data packets
         while data_idx < len(data_packet_list):
-            # print(f"Sending Pkt_idx: {data_idx}")
-
             sender.rdt_send(data_packet_list[data_idx])
 
             resent = sender.input()

@@ -40,8 +40,6 @@ def receive_image(scenario: int, loss_rate: float):
         rx_soc.bind((RX_ADDR, RX_PORT))
         receiver = RDT22Receiver(rx_soc, scenario, loss_rate)
 
-        # print("Expecting initial packet")
-
         # Receive initial packet that holds the number of expected packets
         while True:
             init_pkt = receiver.get_data_pkt()
@@ -53,10 +51,7 @@ def receive_image(scenario: int, loss_rate: float):
 
         data_pkt_list: list[DataPacket] = []
 
-        # print(f"Expecintg {num_pkts} pkts")
-
         while data_pkt_idx <= num_pkts:
-            # print(f"Expecting Pkt_idx: {data_pkt_idx}")
             curr_pkt = receiver.get_data_pkt()
 
             if curr_pkt:

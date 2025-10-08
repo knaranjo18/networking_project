@@ -35,13 +35,11 @@ class RDT22Sender:
         """Called by application to send one chunk of data"""
         if self.state == WAIT_CALL_0:
             self.last_pkt = curr_packet
-            # print(f"Sending Seq num: {curr_packet.seq_num}")
             udt_send(self.sock, self.last_pkt.full_pkt)
             self.state = WAIT_ACK_0
 
         elif self.state == WAIT_CALL_1:
             self.last_pkt = curr_packet
-            # print(f"Sending Seq num: {curr_packet.seq_num}")
             udt_send(self.sock, self.last_pkt.full_pkt)
             self.state = WAIT_ACK_1
 
@@ -54,7 +52,6 @@ class RDT22Sender:
         try:
             rcvpkt = udt_rcv(self.sock)
         except soc.timeout:
-            # print("Timing out")
             return False
 
         rcvpkt = self.__corrupt_ACK_bytes(rcvpkt)
@@ -66,19 +63,15 @@ class RDT22Sender:
 
         if self.state == WAIT_ACK_0:
             if not Packet.is_corrupt(rcvpkt) and Packet.ack_seq(rcvpkt) == 0:
-                # print("Got good ACK for 0")
                 self.state = WAIT_CALL_1
             else:  # corrupt or wrong ACK
-                # print("Bad ACK for 0, resending seq num 0")
                 udt_send(self.sock, self.last_pkt.full_pkt)
                 resent = True
 
         elif self.state == WAIT_ACK_1:
             if not Packet.is_corrupt(rcvpkt) and Packet.ack_seq(rcvpkt) == 1:
-                # print("Got ACK for 1")
                 self.state = WAIT_CALL_0
             else:  # corrupt or wrong ACK
-                # print("Bad ACK for 1, resending seq num 1")
                 udt_send(self.sock, self.last_pkt.full_pkt)
                 resent = True
 
@@ -91,7 +84,6 @@ class RDT22Sender:
             return rx_bytes
         elif self.scenario == TX_ACK_LOSS:
             if random.random() < self.loss_rate and len(rx_bytes) >= 3:
-                # print("corrupt packet")
                 # Flip a single bit in the middle (keeps length; breaks checksum)
                 ba = bytearray(rx_bytes)
                 mid = len(ba) // 2

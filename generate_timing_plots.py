@@ -81,7 +81,7 @@ def plot_time_loss(title: str, time_diffs: dict[int, int]):
             pass
 
     plt.plot(loss_axis, time_axis)
-    plt.ylim(0, 0.6)
+    plt.ylim(0, 1)
     plt.grid()
     plt.xlabel("Loss percentage")
     plt.ylabel("Average completion time (s)")

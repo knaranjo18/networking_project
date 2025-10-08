@@ -30,11 +30,7 @@ def make_data_pkt(data: bytes) -> list[DataPacket]:
 
     # Extract the amount of data required per packet
     for i in range(num_full_pkts):
-        pkt_list.append(
-            DataPacket(
-                data[i * DataPacket.DATA_SIZE : (i + 1) * DataPacket.DATA_SIZE], seq_num
-            )
-        )
+        pkt_list.append(DataPacket(data[i * DataPacket.DATA_SIZE : (i + 1) * DataPacket.DATA_SIZE], seq_num))
         seq_num ^= 1  # alternates between 0 and 1
 
     # Add the last packet with padding to get the full size
@@ -103,6 +99,8 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
 
         # Sends all data packets
         while data_idx < len(data_packet_list):
+            # print(f"Sending Pkt_idx: {data_idx}")
+
             sender.rdt_send(data_packet_list[data_idx])
 
             resent = sender.input()
@@ -140,6 +138,7 @@ if __name__ == "__main__":
     # Iterate over loss rate between 0 to 60 percent with increments of 5
     for loss in range(0, 61, 5):
         for iter in range(0, NUM_ITER):
+            print(f"Scene {scenario}\t\tLoss {loss}%  \tIter {iter}")
             start_time = send_image(bytes_image, scenario, loss / 100)
             write_time_file(scenario, iter, loss, start_time)
-            time.sleep(1)  # Wait a second between steps for things to settle
+            time.sleep(0.3)  # Wait a second between steps for things to settle

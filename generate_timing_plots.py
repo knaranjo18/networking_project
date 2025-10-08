@@ -44,9 +44,7 @@ def read_times_and_loss(file_name: str) -> dict[int, dict[int, list[int]]]:
     return time_loss_dict
 
 
-def get_time_diffs(
-    start_time_loss: dict[int, list], end_time_loss: dict[int, list]
-) -> dict[int, int]:
+def get_time_diffs(start_time_loss: dict[int, list], end_time_loss: dict[int, list]) -> dict[int, int]:
     """Given a start time dictionary and end time dictionary, calculate the average time difference for each loss level"""
     avg_diffs_dict = {}
 
@@ -83,7 +81,7 @@ def plot_time_loss(title: str, time_diffs: dict[int, int]):
             pass
 
     plt.plot(loss_axis, time_axis)
-    plt.ylim(0, 4)
+    plt.ylim(0, 0.6)
     plt.grid()
     plt.xlabel("Loss percentage")
     plt.ylabel("Average completion time (s)")

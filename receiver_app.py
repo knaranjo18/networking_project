@@ -40,16 +40,25 @@ def receive_image(scenario: int, loss_rate: float):
         rx_soc.bind((RX_ADDR, RX_PORT))
         receiver = RDT22Receiver(rx_soc, scenario, loss_rate)
 
-        # First packet should say how many data packets expected
-        num_pkts = int.from_bytes(receiver.get_data_pkt().data, "big")
+        # print("Expecting initial packet")
 
-        data_pkt_idx = 0
+        # Receive initial packet that holds the number of expected packets
+        while True:
+            init_pkt = receiver.get_data_pkt()
+            if init_pkt:
+                num_pkts = int.from_bytes(init_pkt.data, "big")
+                break
+
+        data_pkt_idx = 1
 
         data_pkt_list: list[DataPacket] = []
 
-        while data_pkt_idx < num_pkts:
+        # print(f"Expecintg {num_pkts} pkts")
+
+        while data_pkt_idx <= num_pkts:
+            # print(f"Expecting Pkt_idx: {data_pkt_idx}")
             curr_pkt = receiver.get_data_pkt()
-            
+
             if curr_pkt:
                 data_pkt_list.append(curr_pkt)
                 data_pkt_idx += 1
@@ -106,8 +115,9 @@ if __name__ == "__main__":
     # Iterate over loss rate between 0 to 60 percent with increments of 5
     for loss in range(0, 61, 5):
         for iter in range(0, NUM_ITER):
-            image_bytes, end_time = receive_image(scenario, loss)
+            print(f"Scene {scenario}\t\tLoss {loss}%  \tIter {iter}")
+            image_bytes, end_time = receive_image(scenario, loss / 100)
 
             write_time_file(scenario, iter, loss, end_time)
 
-            save_bmp(image_bytes, f"{output_file}_{loss}_loss")
+            save_bmp(image_bytes, f"{output_file}")

@@ -42,23 +42,41 @@ Instructions
 ========================
 
 
----------------------------
-Running the image transfer
----------------------------
+1. Open two terminals, going forward these will be called T1 and T2.
 
-1. Open two terminals, going forward these will be called T1 and T2. 
+2. In T1 (Receiver side):
+   Start the receiver application. You can specify the output file name and the transfer scenario.
+   - If no name is specified, it defaults to rx_img.
+   - The -s flag controls the test scenario:
+     - 1 = No loss
+     - 2 = ACK loss
+     - 3 = DATA loss
 
-2. In T1, start the receiver application. You can specify the name you want to save the file as. If not name specified it will default to rx_img. You can also specify the data transfer scenario. 1 is no loss, 2 is ack loss, and 3 is data loss. 
+   Example:
+   ```bash
+   python3 receiver_app.py -o rx_test_image -s 1
+   ```
 
-    python3 receiver_app.py -o rx_test_image -s 1
+   - Scenario 1 (No loss): Receiver and sender exchange packets normally with no simulated network loss.
+   - Scenario 2 (ACK loss): The receiver will randomly drop acknowledgment (ACK) packets based on the configured loss rate in constants.py. This tests sender retransmission behavior when ACKs are lost.
+   - Scenario 3 (DATA loss): The receiver simulates data packet loss, forcing retransmissions from the sender when expected sequence numbers are not received.
 
-3. In T2, start the sender application. You can specify the name of the file you want to transmit. The data folder includes one test image, by default it will use this one. You can also specify the data transfer scenario in the same way as step 2. 
+3. In T2 (Sender side):
+   Start the sender application. You can specify the input image file and the same scenario number.
+   - By default, it will use the test image located in the data folder (megamind.png or similar).
 
-    python3 rdt1.0_sender.py -i megamind -s 1
+   Example:
+   ```bash
+   python3 rdt1.0_sender.py -i megamind -s 1
+   ```
 
-4. The sender and receiver will transfer the image a number of times specified by NUM_ITER in the constants.py file for each loss percentage step, these go from 0 to 60 with steps of 5. 
+   Replace -s 1 with -s 2 or -s 3 to match the scenario chosen on the receiver side.
 
-5. All the resulting images will be saved to the data folder.
+4. The sender and receiver will transfer the image multiple times as defined by NUM_ITER in constants.py, for each simulated loss percentage (from 0% to 60% in steps of 5%).
+
+5. All received images will be saved automatically in the data/ directory.
+   Each test run will include log output showing sequence numbers, retransmissions, and loss simulation results, helping visualize reliability performance across different loss conditions.
+
 
 
 ---------------------------

@@ -11,6 +11,7 @@ Environment
 
 OS: Ubuntu 22.04 (Through WSL)
 Language & Version: Python 3.10.12
+Extra packages: matplotlib
 
 ========================
 File descriptions

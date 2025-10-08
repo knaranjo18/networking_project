@@ -38,7 +38,7 @@ def read_times_and_loss(file_name: str) -> dict[int, dict[int, list[int]]]:
     # Extract the loss and time
     with open(full_time_file_path, "r") as f:
         for line in f:
-            _, loss, time = map(int, line.strip().split(","))
+            _, loss, time = map(float, line.strip().split(","))
             time_loss_dict[loss].append(time)
 
     return time_loss_dict
@@ -83,6 +83,7 @@ def plot_time_loss(title: str, time_diffs: dict[int, int]):
             pass
 
     plt.plot(loss_axis, time_axis)
+    plt.ylim(0, 4)
     plt.grid()
     plt.xlabel("Loss percentage")
     plt.ylabel("Average completion time (s)")

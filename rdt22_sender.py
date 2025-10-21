@@ -1,7 +1,8 @@
 import random
 import socket as soc
+import time
 
-from constants import *
+import constants
 from Packets import DataPacket, Packet
 
 # --- State constants ---
@@ -16,9 +17,6 @@ def udt_rcv(sock: soc.socket) -> bytes:
     data, _ = sock.recvfrom(1024)
     return data
 
-def udt_send(sock: soc.socket, pkt: bytes):
-    sock.sendto(pkt, (RX_ADDR, RX_PORT))
-
 
 class RDT22Sender:
     def __init__(self, sock: soc.socket, scenario: int, loss_rate: float):
@@ -30,16 +28,23 @@ class RDT22Sender:
         # Normalize loss_rate to 0..1 if user passes 0..100
         self.loss_rate = loss_rate if 0.0 <= loss_rate <= 1.0 else max(0.0, min(1.0, loss_rate / 100.0))
 
+    def udt_send(self, sock: soc.socket, pkt: bytes):
+        if self.__corrupt_ACK_bytes(pkt) == bytes():
+            return
+        elif self.scenario == constants.TX_ACK_SLOW:
+            time.sleep(1)
+        sock.sendto(pkt, (constants.RX_ADDR, constants.RX_PORT))
+
     def rdt_send(self, curr_packet: DataPacket):
         """Called by application to send one chunk of data"""
         if self.state == WAIT_CALL_0:
             self.last_pkt = curr_packet
-            udt_send(self.sock, self.last_pkt.full_pkt)
+            self.udt_send(self.sock, self.last_pkt.full_pkt)
             self.state = WAIT_ACK_0
 
         elif self.state == WAIT_CALL_1:
             self.last_pkt = curr_packet
-            udt_send(self.sock, self.last_pkt.full_pkt)
+            self.udt_send(self.sock, self.last_pkt.full_pkt)
             self.state = WAIT_ACK_1
 
         else:
@@ -54,7 +59,7 @@ class RDT22Sender:
             # Treat timeout as lost ACK -> resend last packet
             if self.last_pkt is not None:
                 #print("[TX] resend (timeout); state=", self.state)
-                udt_send(self.sock, self.last_pkt.full_pkt)
+                self.udt_send(self.sock, self.last_pkt.full_pkt)
                 return True
             return False
 
@@ -70,7 +75,7 @@ class RDT22Sender:
                 self.state = WAIT_CALL_1
             else:  # corrupt or wrong ACK
                 #print("[TX] resend (bad ACK for seq0); state=", self.state)
-                udt_send(self.sock, self.last_pkt.full_pkt)
+                self.udt_send(self.sock, self.last_pkt.full_pkt)
                 resent = True
 
         elif self.state == WAIT_ACK_1:
@@ -78,7 +83,7 @@ class RDT22Sender:
                 self.state = WAIT_CALL_0
             else:  # corrupt or wrong ACK
                 #print("[TX] resend (bad ACK for seq1); state=", self.state)
-                udt_send(self.sock, self.last_pkt.full_pkt)
+                self.udt_send(self.sock, self.last_pkt.full_pkt)
                 resent = True
 
         return resent
@@ -86,18 +91,23 @@ class RDT22Sender:
     def __corrupt_ACK_bytes(self, rx_bytes: bytes) -> bytes:
         """Randomly corrupts ACK packets depending on the scenario and loss rate"""
 
-        if self.scenario == NO_LOSS:
-            return rx_bytes
-        elif self.scenario == TX_ACK_LOSS:
-            if random.random() < self.loss_rate and len(rx_bytes) >= 3:
-                # Flip a single bit in the middle (keeps length; breaks checksum)
-                ba = bytearray(rx_bytes)
-                mid = len(ba) // 2
-                ba[mid] ^= 0x01
-                return bytes(ba)
-            else:
+        match self.scenario:
+            case constants.NO_LOSS | constants.RX_DATA_LOSS | constants.TX_ACK_DROP | constants.TX_ACK_SLOW | constants.RX_DATA_SLOW:
                 return rx_bytes
-        elif self.scenario == RX_DATA_LOSS:
-            return rx_bytes
-        else:
-            raise NotImplementedError
+            case constants.RX_DATA_DROP:
+                if random.random() < self.loss_rate and len(rx_bytes) >= 4:
+                    return bytes()
+                else:
+                    return rx_bytes
+            case constants.TX_ACK_LOSS:
+                   # TODO: Why is this >=3....
+                if random.random() < self.loss_rate and len(rx_bytes) >= 3:
+                    # Flip a single bit in the middle (keeps length; breaks checksum)
+                    ba = bytearray(rx_bytes)
+                    mid = len(ba) // 2
+                    ba[mid] ^= 0x01
+                    return bytes(ba)
+                else:
+                    return rx_bytes
+            case _:
+                raise NotImplementedError

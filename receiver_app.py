@@ -60,7 +60,10 @@ if __name__ == "__main__":
     rx_sock.bind((RX_ADDR, RX_PORT))
 
     # Apply receiver-side loss only for scenario 2
-    rx_loss_rate = (rx_loss_percent / 100.0) if scenario == RX_DATA_LOSS else 0.0
+    rx_loss_rate = (rx_loss_percent / 100.0)
+    if scenario != RX_DATA_LOSS and scenario != TX_ACK_DROP:
+        rx_loss_rate = 0.0
+
     receiver = RDT22Receiver(rx_sock, scenario, rx_loss_rate)
 
     idx = 0

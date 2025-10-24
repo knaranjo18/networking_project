@@ -14,7 +14,7 @@ def handle_CLI():
     parser.add_argument("-o", "--output_file", default="rx_image",
                         help="Output image base name (no extension)")
     parser.add_argument("-s", "--scenario", default=1, type=int,
-                        help="Data transfer scenario: 0=NO_LOSS, 1=TX_ACK_LOSS, 2=RX_DATA_LOSS")
+                        help="Data transfer scenario: 1=NO_LOSS, 2=TX_ACK_LOSS, 3=RX_DATA_LOSS")
     parser.add_argument("-l", "--loss", default=0, type=int,
                         help="Receiver loss percent for RX_DATA_LOSS (0–100)")
     args = parser.parse_args()

@@ -58,7 +58,7 @@ def handle_CLI():
     parser.add_argument("-i", "--input_file", default="megamind",
                         help="Image base name to send (no extension)")
     parser.add_argument("-s", "--scenario", default=1, type=int,
-                        help="Data transfer scenario: 0=NO_LOSS, 1=TX_ACK_LOSS, 2=RX_DATA_LOSS")
+                        help="Data transfer scenario: 1=NO_LOSS, 2=TX_ACK_LOSS, 3=RX_DATA_LOSS")
     args = parser.parse_args()
     return args.input_file, args.scenario
 

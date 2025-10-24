@@ -21,7 +21,7 @@ def udt_rcv(sock: soc.socket) -> bytes:
 class RDT22Sender:
     def __init__(self, sock: soc.socket, scenario: int, loss_rate: float):
         self.sock = sock
-        self.sock.settimeout(0.5)  # resend if no ACK within 500 ms
+        self.sock.settimeout(0.01)  # resend if no ACK within 10 ms
         self.state = WAIT_CALL_0
         self.last_pkt: DataPacket | None = None  # buffer last sent packet
         self.scenario = scenario

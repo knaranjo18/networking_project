@@ -1,6 +1,6 @@
 import random
-import time
 import socket as soc
+import time
 
 import constants
 from Packets import AckPacket, DataPacket, Packet
@@ -8,6 +8,7 @@ from Packets import AckPacket, DataPacket, Packet
 # --- State constants ---
 WAIT_0 = 0
 WAIT_1 = 1
+
 
 class RDT22Receiver:
     def __init__(self, sock: soc.socket, scenario: int, loss_rate: float):
@@ -29,9 +30,7 @@ class RDT22Receiver:
     def udt_send(self, sock: soc.socket, pkt: bytes):
         # send ACKs back to the most recent sender (not RX_ADDR/RX_PORT)
         if self.last_sender_addr is not None:
-            if self.__corrupt_data_bytes(pkt) == bytes():
-                return
-            elif self.scenario == constants.TX_ACK_SLOW:
+            if self.scenario == constants.TX_ACK_SLOW:
                 time.sleep(1)
             sock.sendto(pkt, self.last_sender_addr)
 
@@ -52,7 +51,9 @@ class RDT22Receiver:
 
                 return data
             else:  # corrupt or has_seq1
-                if self.once and self.last_ack:
+                if rcvpkt == bytes():
+                    return None
+                elif self.once and self.last_ack:
                     self.udt_send(self.sock, self.last_ack.to_bytes())  # was extract_data()
                 else:
                     fake_ack = AckPacket(1)
@@ -69,7 +70,9 @@ class RDT22Receiver:
 
                 return data
             else:  # corrupt or has_seq0
-                if self.last_ack:
+                if rcvpkt == bytes():
+                    return None
+                elif self.last_ack:
                     self.udt_send(self.sock, self.last_ack.to_bytes())  # was extract_data()
                 else:
                     fake_ack = AckPacket(0)
@@ -80,10 +83,10 @@ class RDT22Receiver:
         """Randomly corrupts data packets depending on the scenario and loss rate"""
 
         match self.scenario:
-            case constants.NO_LOSS | constants.TX_ACK_LOSS | constants.RX_DATA_DROP | constants.TX_ACK_SLOW | constants.RX_DATA_SLOW:
+            case constants.NO_LOSS | constants.TX_ACK_LOSS | constants.TX_ACK_SLOW | constants.RX_DATA_SLOW | constants.TX_ACK_DROP:
                 return rx_bytes
-            case constants.TX_ACK_DROP:
-                if random.random() < self.loss_rate and len(rx_bytes) == 4:
+            case constants.RX_DATA_DROP:
+                if random.random() < self.loss_rate and len(rx_bytes) >= 4:
                     return bytes()
                 else:
                     return rx_bytes

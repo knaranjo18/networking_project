@@ -2,7 +2,6 @@ import argparse
 import os
 
 import matplotlib.pyplot as plt
-
 from constants import *
 
 
@@ -24,24 +23,32 @@ def handle_CLI() -> str:
     return args.scenario
 
 
-def read_times_and_loss(file_name: str) -> dict[int, dict[int, list[int]]]:
+def read_times_and_loss(file_name: str) -> tuple[dict[int, dict[int, list[int]]], dict[int, dict[int, list[int]]]]:
     """Read times and loss from a time file and extrac them into a dictionary"""
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
     full_time_file_path = os.path.join(results_folder, file_name)
 
     time_loss_dict: dict[int, list[int]] = {}
+    data_size_dict: dict[int, list[int]] = {}
 
     # Instantiate dictionary entries
     for loss_int in range(0, 61, 5):
         time_loss_dict[loss_int] = []
+        data_size_dict[loss_int] = []
 
     # Extract the loss and time
     with open(full_time_file_path, "r") as f:
         for line in f:
-            _, loss, time = map(float, line.strip().split(","))
+            try:
+                _, loss, time, num_data_bytes = map(float, line.strip().split(","))
+            except:
+                _, loss, time = map(float, line.strip().split(","))
+                num_data_bytes = 911934
+
+            data_size_dict[loss].append(num_data_bytes)
             time_loss_dict[loss].append(time)
 
-    return time_loss_dict
+    return time_loss_dict, data_size_dict
 
 
 def get_time_diffs(start_time_loss: dict[int, list], end_time_loss: dict[int, list]) -> dict[int, int]:
@@ -64,27 +71,45 @@ def get_time_diffs(start_time_loss: dict[int, list], end_time_loss: dict[int, li
     return avg_diffs_dict
 
 
-def plot_time_loss(title: str, time_diffs: dict[int, int]):
-    """Plots the loss vs completion time and saves it to file"""
+def calc_throughput(avg_diffs_dict: dict[int, int], data_size_dict: dict[int, list[int]]) -> dict[int, int]:
+    """Calculate the average throughput in Kilobits per second for each loss level"""
+
+    throughput_dict = {}
+
+    for loss_int in range(0, 61, 5):
+        curr_time = avg_diffs_dict[loss_int]
+        num_bits = (sum(data_size_dict[loss_int]) / len(data_size_dict[loss_int])) * 8
+
+        if curr_time != 0:
+            throughput_dict[loss_int] = num_bits / 1024 / 1024 / curr_time
+
+    return throughput_dict
+
+
+def general_plot(title: str, x_data_list, y_data_dict: dict[int, int], xlabel: str, ylabel: str, ylim: int):
+    """General plotting function"""
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
     file_name = f"{title}_plot.png"
     full_path = os.path.join(results_folder, file_name)
 
-    loss_axis = []
-    time_axis = []
+    x_axis = []
+    y_axis = []
 
-    for loss_int in range(0, 61, 5):
+    for x in x_data_list:
         try:
-            time_axis.append(time_diffs[loss_int])
-            loss_axis.append(loss_int)
+            y_axis.append(y_data_dict[x])
+            x_axis.append(x)
         except:
             pass
 
-    plt.plot(loss_axis, time_axis)
-    plt.ylim(0, 1)
+    print(x_axis)
+    print(y_axis)
+
+    plt.plot(x_axis, y_axis)
+    plt.ylim(0, ylim)
     plt.grid()
-    plt.xlabel("Loss percentage")
-    plt.ylabel("Average completion time (s)")
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
     plt.title(f"Scenario: {title}")
 
     plt.savefig(full_path)
@@ -99,13 +124,22 @@ if __name__ == "__main__":
         file_name = "tx_ack_loss"
     elif scenario == RX_DATA_LOSS:
         file_name = "rx_data_loss"
+    elif scenario == TX_ACK_DROP:
+        file_name = "tx_ack_drop"
+    elif scenario == RX_DATA_DROP:
+        file_name = "rx_data_drop"
     else:
-        print("Unknown scenario. Valid options are 1, 2, and 3")
+        print("Unknown scenario. Valid options are 1, 2, and 3, 4, 5")
         exit()
 
-    start_times_loss = read_times_and_loss(f"{file_name}_start_times.txt")
-    end_times_loss = read_times_and_loss(f"{file_name}_end_times.txt")
+    start_times_loss, _ = read_times_and_loss(f"{file_name}_start_times.txt")
+    end_times_loss, data_size_dict = read_times_and_loss(f"{file_name}_end_times.txt")
 
     avg_diffs_dict = get_time_diffs(start_times_loss, end_times_loss)
+    avg_throughput = calc_throughput(avg_diffs_dict, data_size_dict)
 
-    plot_time_loss(file_name, avg_diffs_dict)
+    loss_list = list(range(0, 61, 5))
+
+    general_plot(f"{file_name}_time", loss_list, avg_diffs_dict, "Loss percentage", "Average completion time (s)", 15)
+    plt.close()
+    general_plot(f"{file_name}_throughput", loss_list, avg_throughput, "Loss percentage", "Average throughput (Mbps)", 25)

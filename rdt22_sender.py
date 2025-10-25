@@ -12,6 +12,9 @@ WAIT_CALL_1 = 2
 WAIT_ACK_1 = 3
 
 
+TIMEOUT = 0.01
+
+
 def udt_rcv(sock: soc.socket) -> bytes:
     # Use recvfrom on UDP (works without connect())
     data, _ = sock.recvfrom(1024)
@@ -20,8 +23,10 @@ def udt_rcv(sock: soc.socket) -> bytes:
 
 class RDT22Sender:
     def __init__(self, sock: soc.socket, scenario: int, loss_rate: float):
+        self.tot_pkt = 0
+        self.num_pkt_affected = 0
         self.sock = sock
-        self.sock.settimeout(0.01)  # resend if no ACK within 10 ms
+        self.sock.settimeout(TIMEOUT)  # resend if no ACK within 10 ms
         self.state = WAIT_CALL_0
         self.last_pkt: DataPacket | None = None  # buffer last sent packet
         self.scenario = scenario
@@ -29,9 +34,7 @@ class RDT22Sender:
         self.loss_rate = loss_rate if 0.0 <= loss_rate <= 1.0 else max(0.0, min(1.0, loss_rate / 100.0))
 
     def udt_send(self, sock: soc.socket, pkt: bytes):
-        if self.__corrupt_ACK_bytes(pkt) == bytes():
-            return
-        elif self.scenario == constants.TX_ACK_SLOW:
+        if self.scenario == constants.TX_ACK_SLOW:
             time.sleep(1)
         sock.sendto(pkt, (constants.RX_ADDR, constants.RX_PORT))
 
@@ -72,14 +75,16 @@ class RDT22Sender:
             if not Packet.is_corrupt(rcvpkt) and Packet.ack_seq(rcvpkt) == 0:
                 self.state = WAIT_CALL_1
             else:  # corrupt or wrong ACK
-                self.udt_send(self.sock, self.last_pkt.full_pkt)
+                if rcvpkt != bytes():  # Only resend if we didn't lose the ACK
+                    self.udt_send(self.sock, self.last_pkt.full_pkt)
                 resent = True
 
         elif self.state == WAIT_ACK_1:
             if not Packet.is_corrupt(rcvpkt) and Packet.ack_seq(rcvpkt) == 1:
                 self.state = WAIT_CALL_0
             else:  # corrupt or wrong ACK
-                self.udt_send(self.sock, self.last_pkt.full_pkt)
+                if rcvpkt != bytes():  # Only resend if we didn't lose the AC
+                    self.udt_send(self.sock, self.last_pkt.full_pkt)
                 resent = True
 
         return resent
@@ -87,17 +92,20 @@ class RDT22Sender:
     def __corrupt_ACK_bytes(self, rx_bytes: bytes) -> bytes:
         """Randomly corrupts ACK packets depending on the scenario and loss rate"""
 
+        self.tot_pkt += 1
+
         match self.scenario:
-            case constants.NO_LOSS | constants.RX_DATA_LOSS | constants.TX_ACK_DROP | constants.TX_ACK_SLOW | constants.RX_DATA_SLOW:
+            case constants.NO_LOSS | constants.RX_DATA_LOSS | constants.TX_ACK_SLOW | constants.RX_DATA_SLOW | constants.RX_DATA_DROP:
                 return rx_bytes
-            case constants.RX_DATA_DROP:
-                if random.random() < self.loss_rate and len(rx_bytes) >= 4:
+            case constants.TX_ACK_DROP:
+                x = random.random()
+                if x < self.loss_rate and len(rx_bytes) == 4:
+                    self.num_pkt_affected += 1
                     return bytes()
                 else:
                     return rx_bytes
             case constants.TX_ACK_LOSS:
-                   # TODO: Why is this >=3....
-                if random.random() < self.loss_rate and len(rx_bytes) >= 3:
+                if random.random() < self.loss_rate and len(rx_bytes) >= 4:
                     # Flip a single bit in the middle (keeps length; breaks checksum)
                     ba = bytearray(rx_bytes)
                     mid = len(ba) // 2

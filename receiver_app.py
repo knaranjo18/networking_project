@@ -97,6 +97,17 @@ def write_time_file(scenario: int, iter: int, loss: int, end_time: float) -> Non
         time_file = "tx_ack_loss_end_times.txt"
     elif scenario == RX_DATA_LOSS:
         time_file = "rx_data_loss_end_times.txt"
+    elif scenario == TX_ACK_DROP:
+        time_file = "tx_ack_drop_start_times.txt"
+    elif scenario == RX_DATA_DROP:
+        time_file = "rx_data_drop_start_times.txt"
+    elif scenario == TX_ACK_SLOW:
+        time_file = "tx_ack_slow_start_times.txt"
+    elif scenario == RX_DATA_SLOW:
+        time_file = "rx_data_slow_start_times.txt"
+    else:
+        print("Invalid scenario number!")
+        time_file = f"{scenario}_start_times.txt"
 
     full_time_file_path = os.path.join(results_folder, time_file)
 

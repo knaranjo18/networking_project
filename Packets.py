@@ -5,180 +5,203 @@ from checksum import check_checksum16, gen_checksum16
 
 @dataclass(frozen=True)
 class Packet:
-    seq_num: int  # Either 0 or 1
-    # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
-    # 1st bit of first byte is seq number, rest of first 2 bytes is # of data bytes + variable data length + optional padding + 2 bytes checksum
-    full_pkt: bytes = field(init=False)
+    SRC_PORT: int = field(default=0, init=False)
+    SRC_PORT_LEN: int = field(default=2, init=False)
+    SRC_PORT_MASK: int = field(default=0xFFFF, init=False)
+    DST_PORT: int = field(default=2, init=False)
+    DST_PORT_LEN: int = field(default=2, init=False)
+    DST_PORT_MASK: int = field(default=0xFFFF, init=False)
+    SEQ_NUM: int = field(default=4, init=False)
+    SEQ_NUM_LEN: int = field(default=4, init=False)
+    SEQ_NUM_MASK: int = field(default=0xFFFFFFFF, init=False)
+    ACK_NUM: int = field(default=8, init=False)
+    ACK_NUM_LEN: int = field(default=4, init=False)
+    ACK_NUM_MASK: int = field(default=0xFFFFFFFF, init=False)
+    DATA_OFFSET: int = field(default=12, init=False)
+    DATA_OFFSET_LEN: int = field(default=1, init=False)
+    DATA_OFFSET_MASK: int = field(default=0xF0, init=False)
+    FLAGS: int = field(default=13, init=False)
+    FLAGS_LEN: int = field(default=1, init=False)
+    FLAGS_MASK: int = field(default=0xFF, init=False)
+    WINDOW_SIZE: int = field(default=14, init=False)
+    WINDOW_SIZE_LEN: int = field(default=2, init=False)
+    WINDOW_SIZE_MASK: int = field(default=0xFFFF, init=False)
+    CHECKSUM: int = field(default=16, init=False)
+    CHECKSUM_LEN: int = field(default=2, init=False)
+    CHECKSUM_MASK: int = field(default=0xFFFF, init=False)
+    URGENT_POINTER: int = field(default=18, init=False)
+    URGENT_POINTER_LEN: int = field(default=2, init=False)
+    URGENT_POINTER_MASK: int = field(default=0xFFFF, init=False)
 
-    # Check for data length/ack here too - Jesse
-    @staticmethod
-    def is_corrupt(pkt: bytes) -> bool:
-        if len(pkt) <= 2:
-            return True
+    FLAG_CWR: int = field(default=0x80, init=False)
+    FLAG_ECE: int = field(default=0x40, init=False)
+    FLAG_URG: int = field(default=0x20, init=False)
+    FLAG_ACK: int = field(default=0x10, init=False)
+    FLAG_PSH: int = field(default=0x08, init=False)
+    FLAG_RST: int = field(default=0x04, init=False)
+    FLAG_SYN: int = field(default=0x02, init=False)
+    FLAG_FIN: int = field(default=0x01, init=False)
 
-        # Last two bytes are the checksum
-        checksum = pkt[-2:]
-        return not check_checksum16(pkt[0:-2], checksum)
+    src_port: int  # source port
+    dst_port: int  # destination port
+    seq_num: int  # sequence number of the packet
+    ack_num: int  # acknowledgment number of the packet
+    data_offset: int  # data offset
+    cwr: bool  # Congestion Window Reduced flag
+    ece: bool  # ECN-Echo flag
+    urg: bool  # Urgent flag
+    ack: bool  # Acknowledgment flag
+    psh: bool  # Push flag
+    rst: bool  # Reset flag
+    syn: bool  # Synchronize flag
+    fin: bool  # Finish flag
+    window_size: int  # window size
+    checksum: int  # checksum of the packet
+    urgent_pointer: int  # urgent pointer
+    data: bytes  # payload data
 
-    # Not sure if this is right - Jesse
-    @staticmethod
-    def is_ack(pkt: bytes) -> bool:
-        return pkt[1] == 0xAA and len(pkt) == 4
+    def __init__(self, raw_data: bytes):
+        src_port = int.from_bytes(
+            raw_data[self.SRC_PORT : self.SRC_PORT + self.SRC_PORT_LEN], "big"
+        )
+        object.__setattr__(self, "src_port", src_port & self.SRC_PORT_MASK)
+        dst_port = int.from_bytes(
+            raw_data[self.DST_PORT : self.DST_PORT + self.DST_PORT_LEN], "big"
+        )
+        object.__setattr__(self, "dst_port", dst_port & self.DST_PORT_MASK)
+        seq_num = int.from_bytes(
+            raw_data[self.SEQ_NUM : self.SEQ_NUM + self.SEQ_NUM_LEN], "big"
+        )
+        object.__setattr__(self, "seq_num", seq_num & self.SEQ_NUM_MASK)
+        ack_num = int.from_bytes(
+            raw_data[self.ACK_NUM : self.ACK_NUM + self.ACK_NUM_LEN], "big"
+        )
+        object.__setattr__(self, "ack_num", ack_num & self.ACK_NUM_MASK)
+        data_offset = raw_data[self.DATA_OFFSET]
+        object.__setattr__(
+            self, "data_offset", (data_offset & self.DATA_OFFSET_MASK) >> 4
+        )
+        flags = raw_data[self.FLAGS]
+        object.__setattr__(self, "cwr", bool(flags & self.FLAG_CWR))
+        object.__setattr__(self, "ece", bool(flags & self.FLAG_ECE))
+        object.__setattr__(self, "urg", bool(flags & self.FLAG_URG))
+        object.__setattr__(self, "ack", bool(flags & self.FLAG_ACK))
+        object.__setattr__(self, "psh", bool(flags & self.FLAG_PSH))
+        object.__setattr__(self, "rst", bool(flags & self.FLAG_RST))
+        object.__setattr__(self, "syn", bool(flags & self.FLAG_SYN))
+        object.__setattr__(self, "fin", bool(flags & self.FLAG_FIN))
+        window_size = int.from_bytes(
+            raw_data[self.WINDOW_SIZE : self.WINDOW_SIZE + self.WINDOW_SIZE_LEN], "big"
+        )
+        object.__setattr__(self, "window_size", window_size & self.WINDOW_SIZE_MASK)
+        checksum = int.from_bytes(
+            raw_data[self.CHECKSUM : self.CHECKSUM + self.CHECKSUM_LEN], "big"
+        )
+        object.__setattr__(self, "checksum", checksum & self.CHECKSUM_MASK)
+        urgent_pointer = int.from_bytes(
+            raw_data[
+                self.URGENT_POINTER : self.URGENT_POINTER + self.URGENT_POINTER_LEN
+            ],
+            "big",
+        )
+        object.__setattr__(
+            self, "urgent_pointer", urgent_pointer & self.URGENT_POINTER_MASK
+        )
 
-    @staticmethod
-    def is_data(pkt: bytes) -> bool:
-        return not Packet.is_ack(pkt)
+        object.__setattr__(self, "data", raw_data[self.data_offset * 4 :])
 
-    @staticmethod
-    def ack_seq(pkt: bytes) -> int:
-        if not Packet.is_ack(pkt):
+    def to_bytes(self) -> bytes:
+        parts: [bytes] = []
+        parts.append(self.src_port.to_bytes(self.SRC_PORT_LEN, "big"))
+        parts.append(self.dst_port.to_bytes(self.DST_PORT_LEN, "big"))
+        parts.append(self.seq_num.to_bytes(self.SEQ_NUM_LEN, "big"))
+        parts.append(self.ack_num.to_bytes(self.ACK_NUM_LEN, "big"))
+        data_offset_byte = (self.data_offset << 4) & self.DATA_OFFSET_MASK
+        parts.append(data_offset_byte.to_bytes(self.DATA_OFFSET_LEN, "big"))
+        flags_byte = 0
+        if self.cwr:
+            flags_byte |= self.FLAG_CWR
+        if self.ece:
+            flags_byte |= self.FLAG_ECE
+        if self.urg:
+            flags_byte |= self.FLAG_URG
+        if self.ack:
+            flags_byte |= self.FLAG_ACK
+        if self.psh:
+            flags_byte |= self.FLAG_PSH
+        if self.rst:
+            flags_byte |= self.FLAG_RST
+        if self.syn:
+            flags_byte |= self.FLAG_SYN
+        if self.fin:
+            flags_byte |= self.FLAG_FIN
+        parts.append(flags_byte.to_bytes(self.FLAGS_LEN, "big"))
+        parts.append(self.window_size.to_bytes(self.WINDOW_SIZE_LEN, "big"))
+        parts.append(self.checksum.to_bytes(self.CHECKSUM_LEN, "big"))
+        parts.append(self.urgent_pointer.to_bytes(self.URGENT_POINTER_LEN, "big"))
+        parts.append(b"\x00" * ((self.data_offset - 5) * 4))
+        parts.append(self.data)
+        return b"".join(parts)
+
+    def compute_checksum(self) -> int:
+        pkt_bytes = self.to_bytes()
+        return gen_checksum16(pkt_bytes)
+
+    def is_corrupt(self) -> bool:
+        pkt_bytes = self.to_bytes()
+        return gen_checksum16(pkt_bytes) != 0
+
+    def is_valid(self) -> bool:
+        if self.is_corrupt():
             return False
-        return pkt[0]
-
-    @staticmethod
-    def data_seq(pkt: bytes) -> int:
-        if not Packet.is_data(pkt):
+        if self.data_offset < 5:
             return False
-        return pkt[0] >> 7
-
-    def get_seq(self) -> int:
-        return self.seq_num
-
-    # --- CHANGED: make extract_data a static parser over raw bytes ---
-    @staticmethod
-    def extract_data(pkt: bytes) -> bytes:
-        """
-        Extract payload from a DATA packet:
-        header (2 bytes: [seq|num_data15]) + payload(num_data) + padding + checksum(2)
-        """
-        if not Packet.is_data(pkt) or len(pkt) < 4:
-            return b""
-        header = int.from_bytes(pkt[0:2], "big")
-        # lower 15 bits are num_data
-        num_data = header & DataPacket.NUM_DATA_ACCESS_MASK
-        # defensive clamp in case of malformed input
-        max_payload = max(0, len(pkt) - 4)
-        num_data = min(num_data, max_payload)
-        return pkt[2 : 2 + num_data]
-
-    # --- NEW: convenience to build ACK bytes ---
-    @staticmethod
-    def make_ack(seq: int) -> bytes:
-        return AckPacket(seq).to_bytes()
+        return True
 
 
 @dataclass(frozen=True)
 class DataPacket(Packet):
-    seq_num: int  # 0 or 1
-    data: bytes  # actual data
-    checksum: bytes  # checksum covers the header and the data
-
-    NUM_DATA_ACCESS_MASK: int = field(
-        default=0x7FFF, init=False
-    )  # Used for access num data value from first two bytes (can also be used to clear seq_num bit)
-    SEQ_NUM_ACCESS_MASK: int = field(
-        default=1 << 15, init=False
-    )  # Used for accessing seq_num from first two bytes
-    FULL_SIZE: int = field(default=1024, init=False)
-    HEADER_LENGTH: int = field(default=2, init=False)
-    CHECKSUM_LENGTH: int = field(default=2, init=False)
-    DATA_SIZE: int = field(default=1024 - 2 - 2, init=False)
-
     def __init__(self, data: bytes, seq_num: int):
+        object.__setattr__(self, "src_port", 0)
+        object.__setattr__(self, "dst_port", 0)
         object.__setattr__(self, "seq_num", seq_num)
+        object.__setattr__(self, "ack_num", 0)
+        object.__setattr__(self, "data_offset", 5)  # assuming no options
+        object.__setattr__(self, "cwr", False)
+        object.__setattr__(self, "ece", False)
+        object.__setattr__(self, "urg", False)
+        object.__setattr__(self, "ack", False)
+        object.__setattr__(self, "psh", False)
+        object.__setattr__(self, "rst", False)
+        object.__setattr__(self, "syn", False)
+        object.__setattr__(self, "fin", False)
+        object.__setattr__(self, "window_size", 0)
+        object.__setattr__(self, "checksum", 0)  # will be calculated later
+        object.__setattr__(self, "urgent_pointer", 0)
         object.__setattr__(self, "data", data)
 
-        # In bytes
-        num_data = len(self.data)
-
-        # Clear the leftmost bit of the two bytes
-        header = num_data & self.NUM_DATA_ACCESS_MASK
-
-        # Set the left most bit to the sequence number
-        header |= seq_num << 15
-
-        header_bytes = header.to_bytes(2, "big")
-
-        if num_data > self.DATA_SIZE:
-            raise ValueError(
-                f"Data too large ({num_data} bytes). Cannot exceed {self.DATA_SIZE} bytes"
-            )
-
-        padding = bytes(
-            self.FULL_SIZE - num_data - self.HEADER_LENGTH - self.CHECKSUM_LENGTH
-        )
-
-        # The data that the checksum will be calculated over
-        sumless_pkt = header_bytes + data + padding
-
-        checksum = gen_checksum16(sumless_pkt)
-
-        object.__setattr__(self, "full_pkt", sumless_pkt + checksum)
-
-    @staticmethod
-    def packet_from_bytes(in_bytes: bytes):
-        header = int.from_bytes(in_bytes[0:2], "big")
-
-        # Grab the leftmost bit of the header for the sequence number
-        seq_num = (header & DataPacket.SEQ_NUM_ACCESS_MASK) >> 15
-
-        # Grab the remaining 15 bits of the header as the number of data bytes
-        num_data = header & DataPacket.NUM_DATA_ACCESS_MASK
-
-        data = in_bytes[2 : 2 + num_data]
-
-        # Last two bytes are the checksum
-        checksum = in_bytes[-2:]
-
-        valid_pkt = check_checksum16(in_bytes[0:-2], checksum)
-
-        if valid_pkt:
-            return DataPacket(data, seq_num)
-        else:
-            print("Checksum detected error!!!")
-            return None
+        object.__setattr__(self, "checksum", self.compute_checksum())
 
 
 @dataclass(frozen=True)
 class AckPacket(Packet):
-    ack_msg: bytes = field(default=bytes([0xAA]), init=False)
-    full_pkt: bytes = field(
-        init=False
-    )  # 1 byte sequence number (using a full byte to get 2 bytes of data to XOR over), 1 byte ACK, 2 bytes checksum
-
-    FULL_SIZE: int = field(default=4, init=False)
-    CHECKSUM_LENGTH: int = field(default=2, init=False)
-    HEADER_LENGTH: int = field(default=1, init=False)
-    ACK_LENGTH: int = field(default=1, init=False)
-
     def __init__(self, seq_num: int):
+        object.__setattr__(self, "src_port", 0)
+        object.__setattr__(self, "dst_port", 0)
         object.__setattr__(self, "seq_num", seq_num)
+        object.__setattr__(self, "ack_num", 0)
+        object.__setattr__(self, "data_offset", 5)  # assuming no options
+        object.__setattr__(self, "cwr", False)
+        object.__setattr__(self, "ece", False)
+        object.__setattr__(self, "urg", False)
+        object.__setattr__(self, "ack", True)
+        object.__setattr__(self, "psh", False)
+        object.__setattr__(self, "rst", False)
+        object.__setattr__(self, "syn", False)
+        object.__setattr__(self, "fin", False)
+        object.__setattr__(self, "window_size", 0)
+        object.__setattr__(self, "checksum", 0)  # will be calculated later
+        object.__setattr__(self, "urgent_pointer", 0)
+        object.__setattr__(self, "data", b"")
 
-        header = seq_num.to_bytes(1, "big")
-
-        # The data that the checksum will be calculated over
-        sumless_pkt = header + self.ack_msg
-
-        checksum = gen_checksum16(sumless_pkt)
-
-        object.__setattr__(self, "full_pkt", sumless_pkt + checksum)
-
-    @staticmethod
-    def packet_from_bytes(in_bytes: bytes):
-        # First byte is the sequence number
-        seq_num = int.from_bytes(in_bytes[0:1], "big")
-
-        # Last two bytes are the checksum
-        checksum = in_bytes[-2:]
-
-        valid_pkt = check_checksum16(in_bytes[0:-2], checksum)
-
-        if valid_pkt:
-            return AckPacket(seq_num)
-        else:
-            print("Checksum detected error!!!")
-            return None
-
-    # NEW: expose raw bytes for convenience
-    def to_bytes(self) -> bytes:
-        return self.full_pkt
+        object.__setattr__(self, "checksum", self.compute_checksum())

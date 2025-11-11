@@ -23,7 +23,9 @@ def handle_CLI() -> str:
     return args.scenario
 
 
-def read_times_and_loss(file_name: str) -> tuple[dict[int, dict[int, list[int]]], dict[int, dict[int, list[int]]]]:
+def read_times_and_loss(
+    file_name: str,
+) -> tuple[dict[int, dict[int, list[int]]], dict[int, dict[int, list[int]]]]:
     """Read times and loss from a time file and extrac them into a dictionary"""
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
     full_time_file_path = os.path.join(results_folder, file_name)
@@ -51,7 +53,9 @@ def read_times_and_loss(file_name: str) -> tuple[dict[int, dict[int, list[int]]]
     return time_loss_dict, data_size_dict
 
 
-def get_time_diffs(start_time_loss: dict[int, list], end_time_loss: dict[int, list]) -> dict[int, int]:
+def get_time_diffs(
+    start_time_loss: dict[int, list], end_time_loss: dict[int, list]
+) -> dict[int, int]:
     """Given a start time dictionary and end time dictionary, calculate the average time difference for each loss level"""
     avg_diffs_dict = {}
 
@@ -71,7 +75,9 @@ def get_time_diffs(start_time_loss: dict[int, list], end_time_loss: dict[int, li
     return avg_diffs_dict
 
 
-def calc_throughput(avg_diffs_dict: dict[int, int], data_size_dict: dict[int, list[int]]) -> dict[int, int]:
+def calc_throughput(
+    avg_diffs_dict: dict[int, int], data_size_dict: dict[int, list[int]]
+) -> dict[int, int]:
     """Calculate the average throughput in Kilobits per second for each loss level"""
 
     throughput_dict = {}
@@ -86,7 +92,14 @@ def calc_throughput(avg_diffs_dict: dict[int, int], data_size_dict: dict[int, li
     return throughput_dict
 
 
-def general_plot(title: str, x_data_list, y_data_dict: dict[int, int], xlabel: str, ylabel: str, ylim: int):
+def general_plot(
+    title: str,
+    x_data_list,
+    y_data_dict: dict[int, int],
+    xlabel: str,
+    ylabel: str,
+    ylim: int,
+):
     """General plotting function"""
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
     file_name = f"{title}_plot.png"
@@ -140,6 +153,20 @@ if __name__ == "__main__":
 
     loss_list = list(range(0, 61, 5))
 
-    general_plot(f"{file_name}_time", loss_list, avg_diffs_dict, "Loss percentage", "Average completion time (s)", 15)
+    general_plot(
+        f"{file_name}_time",
+        loss_list,
+        avg_diffs_dict,
+        "Loss percentage",
+        "Average completion time (s)",
+        15,
+    )
     plt.close()
-    general_plot(f"{file_name}_throughput", loss_list, avg_throughput, "Loss percentage", "Average throughput (Mbps)", 25)
+    general_plot(
+        f"{file_name}_throughput",
+        loss_list,
+        avg_throughput,
+        "Loss percentage",
+        "Average throughput (Mbps)",
+        25,
+    )

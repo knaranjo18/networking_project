@@ -8,18 +8,6 @@ from Packets import DataPacket
 from rdt22_receiver import RDT22Receiver
 
 
-def combine_packets(packet_list: list[DataPacket]) -> bytes:
-    """Extract the data from the packets to a form a continuous byte array"""
-
-    combined_bytes = b""
-
-    # Extracts only the data from the packets
-    for packet in packet_list:
-        combined_bytes += packet.data
-
-    return combined_bytes
-
-
 def save_bmp(data: bytes, output_name: str):
     """Save an array of bytes to a BMP file on disk"""
 
@@ -42,17 +30,17 @@ def receive_image(scenario: int, loss_rate: float):
 
         # Receive initial packet that holds the number of expected packets
         while True:
-            init_pkt = receiver.get_data_pkt()
+            init_pkt = receiver.get_data()
             if init_pkt:
-                num_pkts = int.from_bytes(init_pkt.data, "big")
+                num_pkts = int.from_bytes(init_pkt, "big")
                 break
 
         data_pkt_idx = 1
 
-        data_pkt_list: list[DataPacket] = []
+        data_pkt_list: list[bytes] = []
 
         while data_pkt_idx <= num_pkts:
-            curr_pkt = receiver.get_data_pkt()
+            curr_pkt = receiver.get_data()
 
             if curr_pkt:
                 data_pkt_list.append(curr_pkt)
@@ -60,7 +48,7 @@ def receive_image(scenario: int, loss_rate: float):
 
         end_time = time.time()
 
-        return combine_packets(data_pkt_list), end_time
+        return b"".join(data_pkt_list), end_time
 
 
 def handle_CLI() -> str:
@@ -87,7 +75,9 @@ def handle_CLI() -> str:
     return args.output_file, args.scenario
 
 
-def write_time_file(scenario: int, iter: int, loss: int, end_time: float, image_size: int) -> None:
+def write_time_file(
+    scenario: int, iter: int, loss: int, end_time: float, image_size: int
+) -> None:
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
     os.makedirs(results_folder, exist_ok=True)
 

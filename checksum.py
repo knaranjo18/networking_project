@@ -15,15 +15,15 @@ def gen_checksum16(data: bytes) -> bytes:
         # Running XOR
         checksum ^= chunk
 
-    return checksum.to_bytes(2, "big")
+    return checksum
 
 
-def check_checksum16(data: bytes, checksum: bytes) -> bool:
+def check_checksum16(data: bytes, checksum: int) -> bool:
     """Verifies that data has no error by comparing checksum. If no errors then returns true."""
     # Locally calculate checksum of data
-    calc_checksum = int.from_bytes(gen_checksum16(data), "big")
+    calc_checksum = gen_checksum16(data)
 
     # Compare to a given checksum
-    output = calc_checksum ^ int.from_bytes(checksum, "big")
+    output = calc_checksum ^ checksum
 
     return output == 0

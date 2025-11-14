@@ -12,9 +12,6 @@ WAIT_CALL_1 = 2
 WAIT_ACK_1 = 3
 
 
-TIMEOUT = 0.01
-
-
 def udt_rcv(sock: soc.socket) -> bytes:
     # Use recvfrom on UDP (works without connect())
     data, _ = sock.recvfrom(constants.MAX_PACKET_SIZE)
@@ -26,7 +23,7 @@ class RDT22Sender:
         self.tot_pkt = 0
         self.num_pkt_affected = 0
         self.sock = sock
-        self.sock.settimeout(TIMEOUT)  # resend if no ACK within 10 ms
+        self.sock.settimeout(constants.TIMEOUT)  # resend if no ACK within 10 ms
         self.sndpkt: List[DataPacket] = [
             DataPacket(b"", 1)
         ] * constants.WINDOW_SIZE  # buffer last sent packet

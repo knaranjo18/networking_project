@@ -101,13 +101,14 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
 
         # Sends all data packets
         while data_idx < len(data_packet_list):
-            sender.rdt_send(data_packet_list[data_idx])
-
-            resent = sender.input()
-
-            # If we didn't resend data, send next data packet
-            if not resent:
+            sent = sender.rdt_send(data_packet_list[data_idx])
+            if sent:
                 data_idx += 1
+            sender.input()
+
+        # Ensure all packets are ACKed before finishing
+        while not sender.input():
+            pass
 
         return start_time
 

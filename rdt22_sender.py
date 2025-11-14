@@ -42,7 +42,7 @@ class RDT22Sender:
             time.sleep(1)
         sock.sendto(pkt, (constants.RX_ADDR, constants.RX_PORT))
 
-    def rdt_send(self, curr_packet: DataPacket):
+    def rdt_send(self, curr_packet: DataPacket) -> bool:
         """Called by application to send one chunk of data"""
         if self.nextseqnum < self.base + constants.WINDOW_SIZE:
             self.sndpkt[self.nextseqnum % constants.WINDOW_SIZE] = curr_packet
@@ -50,8 +50,9 @@ class RDT22Sender:
             if self.base == self.nextseqnum:
                 pass  # start timer handed by input()
             self.nextseqnum += 1
-        else:
-            pass
+            return True
+        # window is full data cannot be sent
+        return False
 
     def do_resend(self) -> None:
         """Resend all packets in the window starting from base to nextseqnum-1"""
@@ -62,6 +63,9 @@ class RDT22Sender:
     def input(self) -> bool:
         """Called when a packet arrives from receiver"""
 
+        if self.base == self.nextseqnum:
+            return True
+
         if len(self.sndpkt) == 0:
             return False
 
@@ -71,7 +75,7 @@ class RDT22Sender:
             # Resend all packets in the window on timeout
             self.do_resend()
             # restart timer same as just waiting again
-            return True
+            return False
 
         rcvpkt = self.__corrupt_ACK_bytes(rcvpkt)
         ackpkt = Packet(rcvpkt)
@@ -79,8 +83,9 @@ class RDT22Sender:
             # Theoretically we can make the sequence number go backwards
             self.base = ackpkt.seq_num + 1
             if self.base == self.nextseqnum:
-                pass  # stop timer we don't need to stop waiting as
-            # we will only call the receive function when we need to get an ACK
+                return True  # stop timer we don't need to stop waiting as
+                # we will only call the receive function when we need to get an ACK
+                # Return True to indicates that all expected ACKs have been received
             else:
                 pass  # restart timer same as just waiting again
         else:  # corrupt ACK

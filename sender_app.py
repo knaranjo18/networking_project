@@ -50,10 +50,10 @@ def image_file_2_bytes(image_file_name: str) -> bytes:
 
     # Read in image and convert to bytes
     try:
-        with open(f"{full_img_path}.bmp", "rb") as img_file:
+        with open(f"{full_img_path}", "rb") as img_file:
             img_bytes = img_file.read()
     except:
-        print(f"Could not find file: {full_img_path}.bmp\nExiting program!")
+        print(f"Could not find file: {full_img_path}\nExiting program!")
         exit()
 
     return img_bytes
@@ -67,15 +67,15 @@ def handle_CLI() -> str:
     parser.add_argument(
         "-i",
         "--input_file",
-        default="megamind",
-        help="The name of the image to send (no extension)",
+        default="megamind.bmp",
+        help="The name of the image to send.",
     )
     parser.add_argument(
         "-s",
         "--scenario",
         default=1,
         type=int,
-        help="Data transfer scenario to implement",
+        help="Data transfer scenario to implement.",
     )
 
     args = parser.parse_args()

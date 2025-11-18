@@ -60,7 +60,7 @@ class RDT22Sender:
             pkt = self.sndpkt[seq % constants.WINDOW_SIZE]
             self.udt_send(self.sock, pkt.to_bytes())
 
-    def input(self) -> bool:
+    def input(self, last_acks: bool) -> bool:
         """Called when a packet arrives from receiver"""
 
         if self.base == self.nextseqnum:
@@ -89,6 +89,12 @@ class RDT22Sender:
             else:
                 pass  # restart timer same as just waiting again
         else:  # corrupt ACK
+            # On the last set of transmitions even if ACK is corrupt, we slide the
+            # windows as there aren't later ACKs to correctly move the window
+            if last_acks:
+                self.base += 1
+                if self.base == self.nextseqnum:
+                    return True
             pass  # do nothing if corrupt
 
         return False

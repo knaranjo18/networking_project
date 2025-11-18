@@ -48,9 +48,10 @@ class RDT22Sender:
     def rdt_send(self, curr_packet: DataPacket) -> bool:
         """Called by application to send one chunk of data"""
         if self.nextseqnum < self.base + constants.WINDOW_SIZE:
-            print(
-                f"[{datetime.now().strftime('%S.%f')}] Sending Base: {self.base} \t NextSeqNum: {self.nextseqnum}"
-            )
+            if constants.DEBUG_PRINT:
+                print(
+                    f"[{datetime.now().strftime('%S.%f')}] Sending Base: {self.base} \t NextSeqNum: {self.nextseqnum}"
+                )
 
             self.sndpkt[self.nextseqnum % constants.WINDOW_SIZE] = curr_packet
             self.udt_send(self.sock, curr_packet.to_bytes())
@@ -64,7 +65,8 @@ class RDT22Sender:
     def do_resend(self) -> None:
         """Resend all packets in the window starting from base to nextseqnum-1"""
         for seq in range(self.base, self.nextseqnum):
-            print(f"[{datetime.now().strftime('%S.%f')}] Resending seq#{seq}")
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Resending seq#{seq}")
             pkt = self.sndpkt[seq % constants.WINDOW_SIZE]
             self.udt_send(self.sock, pkt.to_bytes())
 
@@ -80,7 +82,8 @@ class RDT22Sender:
         try:
             rcvpkt = udt_rcv(self.sock)
         except soc.timeout:
-            print(f"[{datetime.now().strftime('%S.%f')}] Timed out")
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Timed out")
             # Resend all packets in the window on timeout
             self.do_resend()
             # restart timer same as just waiting again
@@ -89,10 +92,14 @@ class RDT22Sender:
         rcvpkt = self.__corrupt_ACK_bytes(rcvpkt)
         ackpkt = Packet(rcvpkt)
         if not ackpkt.is_corrupt():
-            print(
-                f"[{datetime.now().strftime('%S.%f')}] Got ACK for seq num# {ackpkt.seq_num}"
-            )
-            # Theoretically we can make the sequence number go backwards
+            if constants.DEBUG_PRINT:
+                print(
+                    f"[{datetime.now().strftime('%S.%f')}] Got ACK for seq num# {ackpkt.seq_num}"
+                )
+            # Theoretically we can make the sequence number go backwards, exit early in this case
+            if ackpkt.seq_num < self.base:
+                return True
+
             self.base = ackpkt.seq_num + 1
             if self.base == self.nextseqnum:
                 return True  # stop timer we don't need to stop waiting as
@@ -101,7 +108,8 @@ class RDT22Sender:
             else:
                 pass  # restart timer same as just waiting again
         else:  # corrupt ACK
-            print(f"[{datetime.now().strftime('%S.%f')}] Got corrupt ACK")
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Got corrupt ACK")
             # On the last set of transmitions even if ACK is corrupt, we slide the
             # windows as there aren't later ACKs to correctly move the window
             if last_acks:
@@ -116,7 +124,8 @@ class RDT22Sender:
         dropPacket = False
         if self.scenario == constants.RX_DATA_DROP:
             if random.random() < self.loss_rate:
-                print(f"[{datetime.now().strftime('%S.%f')}] Data Packet dropped")
+                if constants.DEBUG_PRINT:
+                    print(f"[{datetime.now().strftime('%S.%f')}] Data Packet dropped")
                 dropPacket = True
         
         return dropPacket

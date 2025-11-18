@@ -103,7 +103,8 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
         # Sends all data packets
         while data_idx < len(data_packet_list):
             while data_idx < len(data_packet_list) and sender.rdt_send(data_packet_list[data_idx]):
-                print(f"[{datetime.now().strftime('%S.%f')}] Sent packet {data_idx + 1}")
+                if DEBUG_PRINT:
+                    print(f"[{datetime.now().strftime('%S.%f')}] Sent packet {data_idx + 1}")
                 data_idx += 1
             sender.input(False)
 

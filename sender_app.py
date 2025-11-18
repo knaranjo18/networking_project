@@ -2,6 +2,7 @@ import argparse
 import os
 import socket as soc
 import time
+from datetime import datetime
 
 from constants import *
 from Packets import DataPacket
@@ -101,6 +102,7 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
 
         # Sends all data packets
         while data_idx < len(data_packet_list):
+            print(f"[{datetime.now().strftime('%S.%f')}] Sending packet {data_idx + 1}")
             sent = sender.rdt_send(data_packet_list[data_idx])
             if sent:
                 data_idx += 1
@@ -153,7 +155,9 @@ if __name__ == "__main__":
     # Iterate over loss rate between 0 to 60 percent with increments of 5
     for loss in range(0, 61, 5):
         for iter in range(0, NUM_ITER):
-            print(f"Scene {scenario}\t\tLoss {loss}%  \tIter {iter}")
+            print(
+                f"[{datetime.now().strftime('%S.%f')}] Scene {scenario}\t\tLoss {loss}%  \tIter {iter}"
+            )
             start_time = send_image(bytes_image, scenario, loss / 100)
             write_time_file(scenario, iter, loss, start_time, len(bytes_image))
             time.sleep(0.15)  # Wait a second between steps for things to settle

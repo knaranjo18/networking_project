@@ -1,6 +1,7 @@
 import random
 import socket as soc
 import time
+from datetime import datetime
 
 import constants
 from Packets import AckPacket, DataPacket, Packet
@@ -46,6 +47,25 @@ class RDT22Receiver:
             return None
 
         data_pkt = Packet(rcvpkt)
+
+        if data_pkt.is_corrupt():
+            print(
+                f"[{datetime.now().strftime('%S.%f')}] Packet corrupt. Resending ACK {self.sndpkt.seq_num}"
+            )
+            self.udt_send(self.sock, self.sndpkt.to_bytes())
+            return None
+
+        if data_pkt.seq_num != self.expected_seq:
+            print(
+                f"[{datetime.now().strftime('%S.%f')}] Got packet # {data_pkt.seq_num}; # {self.expected_seq} was expected. Resending ACK {self.sndpkt.seq_num}"
+            )
+            self.udt_send(self.sock, self.sndpkt.to_bytes())
+            return None
+        else:
+            print(
+                f"[{datetime.now().strftime('%S.%f')}] Good packet. Seq# {data_pkt.seq_num}"
+            )
+
         if not data_pkt.is_corrupt() and data_pkt.seq_num == self.expected_seq:
             self.sndpkt = AckPacket(self.expected_seq)
             self.expected_seq += 1
@@ -55,6 +75,9 @@ class RDT22Receiver:
 
         # If we reach here, either packet is corrupt or unexpected seq num
         # Resend last ACK
+        print(
+            f"[{datetime.now().strftime('%S.%f')}] Packet corrupt or unexpected, resend ACKfor SeqNum# {self.sndpkt.seq_num}"
+        )
         self.udt_send(self.sock, self.sndpkt.to_bytes())
         return None
 
@@ -72,6 +95,7 @@ class RDT22Receiver:
                 return rx_bytes
             case constants.RX_DATA_DROP:
                 if random.random() < self.loss_rate and len(rx_bytes) >= 4:
+                    print(f"[{datetime.now().strftime('%S.%f')}] Packet dropped")
                     return bytes()
                 else:
                     return rx_bytes

@@ -41,7 +41,9 @@ class RDT22Sender:
     def udt_send(self, sock: soc.socket, pkt: bytes):
         if self.scenario == constants.TX_ACK_SLOW:
             time.sleep(1)
-        sock.sendto(pkt, (constants.RX_ADDR, constants.RX_PORT))
+
+        if not self.__drop_Data_packet():
+            sock.sendto(pkt, (constants.RX_ADDR, constants.RX_PORT))
 
     def rdt_send(self, curr_packet: DataPacket) -> bool:
         """Called by application to send one chunk of data"""
@@ -66,7 +68,7 @@ class RDT22Sender:
             pkt = self.sndpkt[seq % constants.WINDOW_SIZE]
             self.udt_send(self.sock, pkt.to_bytes())
 
-    def input(self) -> bool:
+    def input(self, last_acks: bool) -> bool:
         """Called when a packet arrives from receiver"""
 
         if self.base == self.nextseqnum:
@@ -100,9 +102,24 @@ class RDT22Sender:
                 pass  # restart timer same as just waiting again
         else:  # corrupt ACK
             print(f"[{datetime.now().strftime('%S.%f')}] Got corrupt ACK")
+            # On the last set of transmitions even if ACK is corrupt, we slide the
+            # windows as there aren't later ACKs to correctly move the window
+            if last_acks:
+                self.base += 1
+                if self.base == self.nextseqnum:
+                    return True
             pass  # do nothing if corrupt
 
         return False
+
+    def __drop_Data_packet(self) -> bool:
+        dropPacket = False
+        if self.scenario == constants.RX_DATA_DROP:
+            if random.random() < self.loss_rate:
+                print(f"[{datetime.now().strftime('%S.%f')}] Data Packet dropped")
+                dropPacket = True
+        
+        return dropPacket
 
     def __corrupt_ACK_bytes(self, rx_bytes: bytes) -> bytes:
         """Randomly corrupts ACK packets depending on the scenario and loss rate"""
@@ -116,15 +133,9 @@ class RDT22Sender:
                 | constants.TX_ACK_SLOW
                 | constants.RX_DATA_SLOW
                 | constants.RX_DATA_DROP
+                | constants.TX_ACK_DROP
             ):
                 return rx_bytes
-            case constants.TX_ACK_DROP:
-                x = random.random()
-                if x < self.loss_rate and len(rx_bytes) == 4:
-                    self.num_pkt_affected += 1
-                    return bytes()
-                else:
-                    return rx_bytes
             case constants.TX_ACK_LOSS:
                 if random.random() < self.loss_rate and len(rx_bytes) >= 4:
                     # Flip a single bit in the middle (keeps length; breaks checksum)

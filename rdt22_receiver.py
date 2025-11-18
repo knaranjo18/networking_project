@@ -36,7 +36,9 @@ class RDT22Receiver:
         if self.last_sender_addr is not None:
             if self.scenario == constants.TX_ACK_SLOW:
                 time.sleep(1)
-            sock.sendto(pkt, self.last_sender_addr)
+
+            if not self.__drop_ACK_packet():
+                sock.sendto(pkt, self.last_sender_addr)
 
     def get_data(self) -> bytes | None:
         "Called by application to get received data, returns None if data is corrupted"
@@ -81,6 +83,16 @@ class RDT22Receiver:
         self.udt_send(self.sock, self.sndpkt.to_bytes())
         return None
 
+    def __drop_ACK_packet(self) -> bool:
+        dropPacket = False
+        if self.scenario == constants.TX_ACK_DROP:
+            x = random.random()
+            if x < self.loss_rate:
+                print(f"[{datetime.now().strftime('%S.%f')}] Dropped ACK Packet")
+                dropPacket = True
+
+        return dropPacket
+            
     def __corrupt_data_bytes(self, rx_bytes: bytes) -> bytes:
         """Randomly corrupts data packets depending on the scenario and loss rate"""
 
@@ -91,14 +103,9 @@ class RDT22Receiver:
                 | constants.TX_ACK_SLOW
                 | constants.RX_DATA_SLOW
                 | constants.TX_ACK_DROP
+                | constants.RX_DATA_DROP
             ):
                 return rx_bytes
-            case constants.RX_DATA_DROP:
-                if random.random() < self.loss_rate and len(rx_bytes) >= 4:
-                    print(f"[{datetime.now().strftime('%S.%f')}] Packet dropped")
-                    return bytes()
-                else:
-                    return rx_bytes
             case constants.RX_DATA_LOSS:
                 if random.random() < self.loss_rate and len(rx_bytes) >= 4:
                     corrupt_data = random.randint(

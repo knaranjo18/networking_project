@@ -8,18 +8,6 @@ from Packets import DataPacket
 from rdt22_receiver import RDT22Receiver
 
 
-def combine_packets(packet_list: list[DataPacket]) -> bytes:
-    """Extract the data from the packets to a form a continuous byte array"""
-
-    combined_bytes = b""
-
-    # Extracts only the data from the packets
-    for packet in packet_list:
-        combined_bytes += packet.data
-
-    return combined_bytes
-
-
 def save_bmp(data: bytes, output_name: str):
     """Save an array of bytes to a BMP file on disk"""
 
@@ -27,11 +15,29 @@ def save_bmp(data: bytes, output_name: str):
     data_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     full_img_path = os.path.join(data_folder, output_name)
 
-    print(f"Saving image to: {full_img_path}.bmp")
+    print(f"Saving image to: {full_img_path}")
 
     # Write the image to file
-    with open(f"{full_img_path}.bmp", "wb") as img_file:
+    with open(f"{full_img_path}", "wb") as img_file:
         img_file.write(data)
+
+
+def check_image(data: bytes, image_file_name: str) -> bool:
+    """Compares received image bytes to an input image file to verify correctness"""
+
+    # Get image path
+    data_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+    full_img_path = os.path.join(data_folder, image_file_name)
+
+    # Read in image and convert to bytes
+    try:
+        with open(f"{full_img_path}", "rb") as img_file:
+            img_bytes = img_file.read()
+    except:
+        print(f"Could not find file: {full_img_path}\nExiting program!")
+        exit()
+
+    return data == img_bytes
 
 
 def receive_image(scenario: int, loss_rate: float):
@@ -42,17 +48,17 @@ def receive_image(scenario: int, loss_rate: float):
 
         # Receive initial packet that holds the number of expected packets
         while True:
-            init_pkt = receiver.get_data_pkt()
+            init_pkt = receiver.get_data()
             if init_pkt:
-                num_pkts = int.from_bytes(init_pkt.data, "big")
+                num_pkts = int.from_bytes(init_pkt, "big")
                 break
 
         data_pkt_idx = 1
 
-        data_pkt_list: list[DataPacket] = []
+        data_pkt_list: list[bytes] = []
 
         while data_pkt_idx <= num_pkts:
-            curr_pkt = receiver.get_data_pkt()
+            curr_pkt = receiver.get_data()
 
             if curr_pkt:
                 data_pkt_list.append(curr_pkt)
@@ -60,7 +66,7 @@ def receive_image(scenario: int, loss_rate: float):
 
         end_time = time.time()
 
-        return combine_packets(data_pkt_list), end_time
+        return b"".join(data_pkt_list), end_time
 
 
 def handle_CLI() -> str:
@@ -71,23 +77,31 @@ def handle_CLI() -> str:
     parser.add_argument(
         "-o",
         "--output_file",
-        default="rx_img",
-        help="The name to save the image as (no extension)",
+        default="rx_img.bmp",
+        help="The name to save the image as.",
+    )
+    parser.add_argument(
+        "-i",
+        "--input_file",
+        default="megamind.bmp",
+        help="The name of the image compare against.",
     )
     parser.add_argument(
         "-s",
         "--scenario",
         default=1,
         type=int,
-        help="Data transfer scenario to implement",
+        help="Data transfer scenario to implement.",
     )
 
     args = parser.parse_args()
 
-    return args.output_file, args.scenario
+    return args.output_file, args.scenario, args.input_file
 
 
-def write_time_file(scenario: int, iter: int, loss: int, end_time: float, image_size: int) -> None:
+def write_time_file(
+    scenario: int, iter: int, loss: int, end_time: float, image_size: int
+) -> None:
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
     os.makedirs(results_folder, exist_ok=True)
 
@@ -116,13 +130,17 @@ def write_time_file(scenario: int, iter: int, loss: int, end_time: float, image_
 
 
 if __name__ == "__main__":
-    output_file, scenario = handle_CLI()
+    output_file, scenario, input_file = handle_CLI()
 
     # Iterate over loss rate between 0 to 60 percent with increments of 5
     for loss in range(0, 61, 5):
         for iter in range(0, NUM_ITER):
             print(f"Scene {scenario}\t\tLoss {loss}%  \tIter {iter}")
             image_bytes, end_time = receive_image(scenario, loss / 100)
+
+            if not check_image(image_bytes, input_file):
+                print("Received image does not match the original image!")
+                exit()
 
             write_time_file(scenario, iter, loss, end_time, len(image_bytes))
 

@@ -14,27 +14,29 @@ def make_data_pkt(data: bytes) -> list[DataPacket]:
     num_bytes = len(data)
 
     # Doing integer division to get the number of full packets
-    num_full_pkts = num_bytes // DataPacket.DATA_SIZE
+    num_full_pkts = num_bytes // MAX_DATA_SIZE
 
     pkt_list = []
 
-    seq_num = 0
+    seq_num = 1
 
     # First packet sent will contain the number of data packets to follow
     num_data_packets = num_full_pkts + 1
     num_packets_bytes = num_data_packets.to_bytes(8, "big")
     first_packet = DataPacket(num_packets_bytes, seq_num)
-    seq_num ^= 1
+    seq_num += 1
 
     pkt_list.append(first_packet)
 
     # Extract the amount of data required per packet
     for i in range(num_full_pkts):
-        pkt_list.append(DataPacket(data[i * DataPacket.DATA_SIZE : (i + 1) * DataPacket.DATA_SIZE], seq_num))
-        seq_num ^= 1  # alternates between 0 and 1
+        pkt_list.append(
+            DataPacket(data[i * MAX_DATA_SIZE : (i + 1) * MAX_DATA_SIZE], seq_num)
+        )
+        seq_num += 1  # alternates between 0 and 1
 
     # Add the last packet with padding to get the full size
-    pkt_list.append(DataPacket(data[num_full_pkts * DataPacket.DATA_SIZE :], seq_num))
+    pkt_list.append(DataPacket(data[num_full_pkts * MAX_DATA_SIZE :], seq_num))
 
     return pkt_list
 
@@ -48,10 +50,10 @@ def image_file_2_bytes(image_file_name: str) -> bytes:
 
     # Read in image and convert to bytes
     try:
-        with open(f"{full_img_path}.bmp", "rb") as img_file:
+        with open(f"{full_img_path}", "rb") as img_file:
             img_bytes = img_file.read()
     except:
-        print(f"Could not find file: {full_img_path}.bmp\nExiting program!")
+        print(f"Could not find file: {full_img_path}\nExiting program!")
         exit()
 
     return img_bytes
@@ -65,15 +67,15 @@ def handle_CLI() -> str:
     parser.add_argument(
         "-i",
         "--input_file",
-        default="megamind",
-        help="The name of the image to send (no extension)",
+        default="megamind.bmp",
+        help="The name of the image to send.",
     )
     parser.add_argument(
         "-s",
         "--scenario",
         default=1,
         type=int,
-        help="Data transfer scenario to implement",
+        help="Data transfer scenario to implement.",
     )
 
     args = parser.parse_args()
@@ -99,18 +101,21 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
 
         # Sends all data packets
         while data_idx < len(data_packet_list):
-            sender.rdt_send(data_packet_list[data_idx])
-
-            resent = sender.input()
-
-            # If we didn't resend data, send next data packet
-            if not resent:
+            sent = sender.rdt_send(data_packet_list[data_idx])
+            if sent:
                 data_idx += 1
+            sender.input()
+
+        # Ensure all packets are ACKed before finishing
+        while not sender.input():
+            pass
 
         return start_time
 
 
-def write_time_file(scenario: int, iter: int, loss: int, start_time: float, data_length: float) -> None:
+def write_time_file(
+    scenario: int, iter: int, loss: int, start_time: float, data_length: float
+) -> None:
     """Write start time to file for later analysis"""
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
     os.makedirs(results_folder, exist_ok=True)  # <-- ensure folder exists

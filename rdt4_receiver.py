@@ -4,14 +4,9 @@ import time
 from datetime import datetime
 
 import constants
-from Packets import AckPacket, DataPacket, Packet
+from Packets import AckPacket, Packet
 
-# --- State constants ---
-WAIT_0 = 0
-WAIT_1 = 1
-
-
-class RDT22Receiver:
+class RDT4Receiver:
     def __init__(self, sock: soc.socket, scenario: int, loss_rate: float):
         self.last_sender_addr: tuple[str, int] | None = None
         self.sock = sock
@@ -42,14 +37,14 @@ class RDT22Receiver:
 
     def get_data(self) -> bytes | None:
         "Called by application to get received data, returns None if data is corrupted"
+        
+        # Receive packet and potentially corrupt it
         rcvpkt = self.udt_rcv(self.sock)
-
         rcvpkt = self.__corrupt_data_bytes(rcvpkt)
-        if rcvpkt == bytes():
-            return None
 
         data_pkt = Packet(rcvpkt)
 
+        # Bad packet
         if data_pkt.is_corrupt():
             if constants.DEBUG_PRINT:
                 print(
@@ -58,6 +53,7 @@ class RDT22Receiver:
             self.udt_send(self.sock, self.sndpkt.to_bytes())
             return None
 
+        # Bad packet
         if data_pkt.seq_num != self.expected_seq:
             if constants.DEBUG_PRINT:
                 print(
@@ -65,27 +61,20 @@ class RDT22Receiver:
                 )
             self.udt_send(self.sock, self.sndpkt.to_bytes())
             return None
-        else:
+
+        # Good packet
+        if not data_pkt.is_corrupt() and data_pkt.seq_num == self.expected_seq:
             if constants.DEBUG_PRINT:
                 print(
                     f"[{datetime.now().strftime('%S.%f')}] Good packet. Seq# {data_pkt.seq_num}"
                 )
 
-        if not data_pkt.is_corrupt() and data_pkt.seq_num == self.expected_seq:
             self.sndpkt = AckPacket(self.expected_seq)
             self.expected_seq += 1
             self.udt_send(self.sock, self.sndpkt.to_bytes())
 
             return data_pkt.data
 
-        # If we reach here, either packet is corrupt or unexpected seq num
-        # Resend last ACK
-        if constants.DEBUG_PRINT:
-            print(
-                f"[{datetime.now().strftime('%S.%f')}] Packet corrupt or unexpected, resend ACKfor SeqNum# {self.sndpkt.seq_num}"
-            )
-        self.udt_send(self.sock, self.sndpkt.to_bytes())
-        return None
 
     def __drop_ACK_packet(self) -> bool:
         dropPacket = False

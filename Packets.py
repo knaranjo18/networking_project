@@ -111,7 +111,7 @@ class Packet:
         object.__setattr__(self, "data", raw_data[self.data_offset * 4 :])
 
     def to_bytes(self) -> bytes:
-        parts: [bytes] = []
+        parts: list[bytes] = []
         parts.append(self.src_port.to_bytes(self.SRC_PORT_LEN, "big"))
         parts.append(self.dst_port.to_bytes(self.DST_PORT_LEN, "big"))
         parts.append(self.seq_num.to_bytes(self.SEQ_NUM_LEN, "big"))

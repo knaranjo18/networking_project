@@ -6,7 +6,7 @@ from datetime import datetime
 
 from constants import *
 from Packets import DataPacket
-from rdt22_sender import RDT22Sender
+from rdt4_sender import RDT4Sender
 
 
 def make_data_pkt(data: bytes) -> list[DataPacket]:
@@ -79,22 +79,24 @@ def handle_CLI() -> str:
         help="Data transfer scenario to implement.",
     )
 
+    parser.add_argument("-x", "--xtype", default="loss", type=str, help="X-axis type. loss, timeout, window")
+
     args = parser.parse_args()
 
-    return args.input_file, args.scenario
+    return args.input_file, args.scenario, args.xtype
 
 
-def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
+def send_image(bytes_image: bytes, scenario: int, loss: float, window_size: int, timeout: float) -> float:
     """Main loop that uses RDT 2.2 to send bytes to receiver"""
 
     # Create socket that will be used to send all packets
     tx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
     with tx_soc:
-        # (Minimal change) Removed UDP connect; rdt22_sender uses recvfrom() for ACKs
+        # (Minimal change) Removed UDP connect; rdt4_sender uses recvfrom() for ACKs
 
         data_packet_list = make_data_pkt(bytes_image)
 
-        sender = RDT22Sender(tx_soc, scenario, loss)
+        sender = RDT4Sender(tx_soc, scenario, loss, window_size, timeout)
 
         data_idx = 0
 
@@ -116,26 +118,26 @@ def send_image(bytes_image: bytes, scenario: int, loss: float) -> float:
 
 
 def write_time_file(
-    scenario: int, iter: int, loss: int, start_time: float, data_length: float
+    scenario: int, iter: int, x_axis_val: int, x_axis_type:int, start_time: float, data_length: float
 ) -> None:
     """Write start time to file for later analysis"""
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
     os.makedirs(results_folder, exist_ok=True)  # <-- ensure folder exists
 
     if scenario == NO_LOSS:
-        time_file = "no_loss_start_times.txt"
+        time_file = f"no_loss_start_times_{x_axis_type}.txt"
     elif scenario == TX_ACK_LOSS:
-        time_file = "tx_ack_loss_start_times.txt"
+        time_file = f"tx_ack_loss_start_times_{x_axis_type}.txt"
     elif scenario == RX_DATA_LOSS:
-        time_file = "rx_data_loss_start_times.txt"
+        time_file = f"rx_data_loss_start_times_{x_axis_type}.txt"
     elif scenario == TX_ACK_DROP:
-        time_file = "tx_ack_drop_start_times.txt"
+        time_file = f"tx_ack_drop_start_times_{x_axis_type}.txt"
     elif scenario == RX_DATA_DROP:
-        time_file = "rx_data_drop_start_times.txt"
+        time_file = f"rx_data_drop_start_times_{x_axis_type}.txt"
     elif scenario == TX_ACK_SLOW:
-        time_file = "tx_ack_slow_start_times.txt"
+        time_file = f"tx_ack_slow_start_times_{x_axis_type}.txt"
     elif scenario == RX_DATA_SLOW:
-        time_file = "rx_data_slow_start_times.txt"
+        time_file = f"rx_data_slow_start_times_{x_axis_type}.txt"
     else:
         print("Invalid scenario number!")
         time_file = f"{scenario}_start_times.txt"
@@ -143,21 +145,44 @@ def write_time_file(
     full_time_file_path = os.path.join(results_folder, time_file)
 
     with open(full_time_file_path, "a") as f:
-        f.write(f"{iter},{loss},{start_time},{data_length}\n")
+        f.write(f"{iter},{x_axis_val},{start_time},{data_length}\n")
 
 
 if __name__ == "__main__":
     # Process command line arguments
-    input_file, scenario = handle_CLI()
+    input_file, scenario, xtype = handle_CLI()
 
     bytes_image = image_file_2_bytes(input_file)
 
+    if xtype == "loss":
+        loss_list = LOSS_RANGE
+        window_list = WINDOW_SIZE_FIXED
+        timeout_list = TIMEOUT_FIXED
+        x_axis_val = loss_list
+    elif xtype == "window":
+        loss_list = LOSS_FIXED
+        window_list = WINDOW_SIZE_RANGE
+        timeout_list = TIMEOUT_FIXED
+        x_axis_val = window_list
+    elif xtype == "timeout":
+        loss_list = LOSS_FIXED
+        window_list = WINDOW_SIZE_FIXED
+        timeout_list = TIMEOUT_RANGE
+        x_axis_val = timeout_list
+    else:
+        print("Unknown xtype. Must be either 'loss', 'window', or 'timeout'")
+        exit(1)
+
     # Iterate over loss rate between 0 to 60 percent with increments of 5
-    for loss in range(0, 61, 5):
-        for iter in range(0, NUM_ITER):
-            print(
-                f"[{datetime.now().strftime('%S.%f')}] Scene {scenario}\t\tLoss {loss}%  \tIter {iter}"
-            )
-            start_time = send_image(bytes_image, scenario, loss / 100)
-            write_time_file(scenario, iter, loss, start_time, len(bytes_image))
-            time.sleep(0.15)  # Wait a second between steps for things to settle
+    x_idx = -1
+    for loss in loss_list:
+        for window_size in window_list:
+            for timeout in timeout_list:
+                x_idx += 1
+                for iter in range(0, NUM_ITER):
+                    print(
+                        f"[{datetime.now().strftime('%S.%f')}] Scene {scenario}\t\t{xtype.capitalize()} {x_axis_val[x_idx]}%  \tIter {iter}"
+                    )
+                    start_time = send_image(bytes_image, scenario, loss / 100, window_size, timeout)
+                    write_time_file(scenario, iter, x_axis_val[x_idx], xtype, start_time, len(bytes_image))
+                    time.sleep(0.15)  # Wait a second between steps for things to settle

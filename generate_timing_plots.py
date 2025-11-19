@@ -18,13 +18,15 @@ def handle_CLI() -> str:
         help="Data transfer scenario to implement",
     )
 
+    parser.add_argument("-x", "--xtype", default="loss", type=str, help="X-axis type. loss, timeout, window")
+
     args = parser.parse_args()
 
-    return args.scenario
+    return args.scenario, args.xtype
 
 
 def read_times_and_loss(
-    file_name: str,
+    file_name: str, x_range: list
 ) -> tuple[dict[int, dict[int, list[int]]], dict[int, dict[int, list[int]]]]:
     """Read times and loss from a time file and extrac them into a dictionary"""
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
@@ -34,7 +36,7 @@ def read_times_and_loss(
     data_size_dict: dict[int, list[int]] = {}
 
     # Instantiate dictionary entries
-    for loss_int in range(0, 61, 5):
+    for loss_int in x_range:
         time_loss_dict[loss_int] = []
         data_size_dict[loss_int] = []
 
@@ -42,24 +44,24 @@ def read_times_and_loss(
     with open(full_time_file_path, "r") as f:
         for line in f:
             try:
-                _, loss, time, num_data_bytes = map(float, line.strip().split(","))
+                _, x_val, time, num_data_bytes = map(float, line.strip().split(","))
             except:
-                _, loss, time = map(float, line.strip().split(","))
+                _, x_val, time = map(float, line.strip().split(","))
                 num_data_bytes = 911934
 
-            data_size_dict[loss].append(num_data_bytes)
-            time_loss_dict[loss].append(time)
+            data_size_dict[x_val].append(num_data_bytes)
+            time_loss_dict[x_val].append(time)
 
     return time_loss_dict, data_size_dict
 
 
 def get_time_diffs(
-    start_time_loss: dict[int, list], end_time_loss: dict[int, list]
+    start_time_loss: dict[int, list], end_time_loss: dict[int, list], x_range: list
 ) -> dict[int, int]:
     """Given a start time dictionary and end time dictionary, calculate the average time difference for each loss level"""
     avg_diffs_dict = {}
 
-    for loss_int in range(0, 61, 5):
+    for loss_int in x_range:
         diff_list = []
         start_time_list = start_time_loss[loss_int]
         end_time_list = end_time_loss[loss_int]
@@ -76,13 +78,13 @@ def get_time_diffs(
 
 
 def calc_throughput(
-    avg_diffs_dict: dict[int, int], data_size_dict: dict[int, list[int]]
+    avg_diffs_dict: dict[int, int], data_size_dict: dict[int, list[int]], x_range: list
 ) -> dict[int, int]:
     """Calculate the average throughput in Kilobits per second for each loss level"""
 
     throughput_dict = {}
 
-    for loss_int in range(0, 61, 5):
+    for loss_int in x_range:
         curr_time = avg_diffs_dict[loss_int]
         num_bits = (sum(data_size_dict[loss_int]) / len(data_size_dict[loss_int])) * 8
 
@@ -118,7 +120,7 @@ def general_plot(
     print(x_axis)
     print(y_axis)
 
-    plt.plot(x_axis, y_axis)
+    plt.plot(x_axis, y_axis, marker="o")
     plt.ylim(0, ylim)
     plt.grid()
     plt.xlabel(xlabel)
@@ -129,7 +131,7 @@ def general_plot(
 
 
 if __name__ == "__main__":
-    scenario = handle_CLI()
+    scenario, xtype = handle_CLI()
 
     if scenario == NO_LOSS:
         file_name = "no_loss"
@@ -145,28 +147,37 @@ if __name__ == "__main__":
         print("Unknown scenario. Valid options are 1, 2, and 3, 4, 5")
         exit()
 
-    start_times_loss, _ = read_times_and_loss(f"{file_name}_start_times.txt")
-    end_times_loss, data_size_dict = read_times_and_loss(f"{file_name}_end_times.txt")
+    if xtype == "loss":
+        x_range = LOSS_RANGE
+    elif xtype == "window":
+        x_range = WINDOW_SIZE_RANGE
+    elif xtype == "timeout":
+        x_range = TIMEOUT_RANGE
+    else:
+        print("Unknown xtype. Must be either 'loss', 'window', or 'timeout'")
+        exit(1)
 
-    avg_diffs_dict = get_time_diffs(start_times_loss, end_times_loss)
-    avg_throughput = calc_throughput(avg_diffs_dict, data_size_dict)
+    start_times_loss, _ = read_times_and_loss(f"{file_name}_start_times_{xtype}.txt", x_range)
+    end_times_loss, data_size_dict = read_times_and_loss(f"{file_name}_end_times_{xtype}.txt", x_range)
 
-    loss_list = list(range(0, 61, 5))
+    avg_diffs_dict = get_time_diffs(start_times_loss, end_times_loss, x_range)
+    avg_throughput = calc_throughput(avg_diffs_dict, data_size_dict, x_range)
 
     general_plot(
-        f"{file_name}_time",
-        loss_list,
+        f"{file_name}_time_{xtype}",
+        x_range,
         avg_diffs_dict,
-        "Loss percentage",
+        xtype.capitalize(),
         "Average completion time (s)",
-        15,
+        10,
     )
+
     plt.close()
-    general_plot(
-        f"{file_name}_throughput",
-        loss_list,
-        avg_throughput,
-        "Loss percentage",
-        "Average throughput (Mbps)",
-        25,
-    )
+    # general_plot(
+    #     f"{file_name}_throughput_{xtype}",
+    #     x_range,
+    #     avg_throughput,
+    #     xtype.capitalize(),
+    #     "Average throughput (Mbps)",
+    #     40,
+    # )

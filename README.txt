@@ -17,8 +17,8 @@ Extra packages: matplotlib
 File descriptions
 ========================
 
-rdt22_receiver.py: Contains the class that implements the RDT3.0 receiver protocol w/ options for adding packet errors
-rdt22_sender.py: Contains the class that implements the RDT3.0 sender protocol w/ options for adding packet errors
+rdt4_receiver.py: Contains the class that implements the RDT3.0 receiver protocol w/ options for adding packet errors
+rdt4_sender.py: Contains the class that implements the RDT3.0 sender protocol w/ options for adding packet errors
 sender_app.py: Uses the RDT 3.0 protocol to send an image to a listening application, does multiple iterations for each loss step from 0 to 60 percent
 receiver_app.py: Uses the RDT 3.0 protocol to receive an image from a sending application, does multiple iterations for each loss step from 0 to 60 percent
 Packets.py: Contains data classes for generic Packet class, Data Packet class, and ACK Packet class

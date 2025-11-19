@@ -3,9 +3,9 @@ import os
 import socket as soc
 import time
 
+from datetime import datetime
 from constants import *
-from Packets import DataPacket
-from rdt22_receiver import RDT22Receiver
+from rdt4_receiver import RDT4Receiver
 
 
 def save_bmp(data: bytes, output_name: str):
@@ -44,7 +44,7 @@ def receive_image(scenario: int, loss_rate: float):
     rx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
     with rx_soc:
         rx_soc.bind((RX_ADDR, RX_PORT))
-        receiver = RDT22Receiver(rx_soc, scenario, loss_rate)
+        receiver = RDT4Receiver(rx_soc, scenario, loss_rate)
 
         # Receive initial packet that holds the number of expected packets
         while True:
@@ -93,32 +93,34 @@ def handle_CLI() -> str:
         type=int,
         help="Data transfer scenario to implement.",
     )
+    
+    parser.add_argument("-x", "--xtype", default="loss", type=str, help="X-axis type. loss, timeout, window")
 
     args = parser.parse_args()
 
-    return args.output_file, args.scenario, args.input_file
+    return args.output_file, args.scenario, args.input_file, args.xtype
 
 
 def write_time_file(
-    scenario: int, iter: int, loss: int, end_time: float, image_size: int
+    scenario: int, iter: int, x_axis_val: int, x_axis_type: int, end_time: float, image_size: int
 ) -> None:
     results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
     os.makedirs(results_folder, exist_ok=True)
 
     if scenario == NO_LOSS:
-        time_file = "no_loss_end_times.txt"
+        time_file = f"no_loss_end_times_{x_axis_type}.txt"
     elif scenario == TX_ACK_LOSS:
-        time_file = "tx_ack_loss_end_times.txt"
+        time_file = f"tx_ack_loss_end_times_{x_axis_type}.txt"
     elif scenario == RX_DATA_LOSS:
-        time_file = "rx_data_loss_end_times.txt"
+        time_file = f"rx_data_loss_end_times_{x_axis_type}.txt"
     elif scenario == TX_ACK_DROP:
-        time_file = "tx_ack_drop_end_times.txt"
+        time_file = f"tx_ack_drop_end_times_{x_axis_type}.txt"
     elif scenario == RX_DATA_DROP:
-        time_file = "rx_data_drop_end_times.txt"
+        time_file = f"rx_data_drop_end_times_{x_axis_type}.txt"
     elif scenario == TX_ACK_SLOW:
-        time_file = "tx_ack_slow_end_times.txt"
+        time_file = f"tx_ack_slow_end_times_{x_axis_type}.txt"
     elif scenario == RX_DATA_SLOW:
-        time_file = "rx_data_slow_end_times.txt"
+        time_file = f"rx_data_slow_end_times_{x_axis_type}.txt"
     else:
         print("Invalid scenario number!")
         time_file = f"{scenario}_start_times.txt"
@@ -126,22 +128,49 @@ def write_time_file(
     full_time_file_path = os.path.join(results_folder, time_file)
 
     with open(full_time_file_path, "a") as f:
-        f.write(f"{iter},{loss},{end_time},{image_size}\n")
+        f.write(f"{iter},{x_axis_val},{end_time},{image_size}\n")
 
 
 if __name__ == "__main__":
-    output_file, scenario, input_file = handle_CLI()
+    output_file, scenario, input_file, xtype = handle_CLI()
 
-    # Iterate over loss rate between 0 to 60 percent with increments of 5
-    for loss in range(0, 61, 5):
-        for iter in range(0, NUM_ITER):
-            print(f"Scene {scenario}\t\tLoss {loss}%  \tIter {iter}")
-            image_bytes, end_time = receive_image(scenario, loss / 100)
+    if xtype == "loss":
+        loss_list = LOSS_RANGE
+        window_list = WINDOW_SIZE_FIXED
+        timeout_list = TIMEOUT_FIXED
+        x_axis_val = loss_list
+    elif xtype == "window":
+        loss_list = LOSS_FIXED
+        window_list = WINDOW_SIZE_RANGE
+        timeout_list = TIMEOUT_FIXED
+        x_axis_val = window_list
+    elif xtype == "timeout":
+        loss_list = LOSS_FIXED
+        window_list = WINDOW_SIZE_FIXED
+        timeout_list = TIMEOUT_RANGE
+        x_axis_val = timeout_list
+    else:
+        print("Unknown xtype. Must be either 'loss', 'window', or 'timeout'")
+        exit(1)
 
-            if not check_image(image_bytes, input_file):
-                print("Received image does not match the original image!")
-                exit()
 
-            write_time_file(scenario, iter, loss, end_time, len(image_bytes))
+    # Iterate over one of various variables, could be scenario loss, window size or timeout value
+    x_idx = -1
+    for loss in loss_list:
+        for window_size in window_list:
+            for timeout in timeout_list:
+                x_idx += 1
+                for iter in range(0, NUM_ITER):
+                    print(
+                        f"[{datetime.now().strftime('%S.%f')}] Scene {scenario}\t\t{xtype.capitalize()} {x_axis_val[x_idx]}%  \tIter {iter}"
+                    )
 
-            save_bmp(image_bytes, f"{output_file}")
+                    image_bytes, end_time = receive_image(scenario, loss / 100)
+
+                    if not check_image(image_bytes, input_file):
+                        print("Received image does not match the original image!")
+                        exit()
+
+                    write_time_file(scenario, iter, x_axis_val[x_idx], xtype, end_time, len(image_bytes))
+
+                    save_bmp(image_bytes, f"{output_file}")

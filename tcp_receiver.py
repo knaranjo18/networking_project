@@ -146,6 +146,9 @@ class TCPReceiver:
                 rx_bytes = self.udt_rcv(self.sock)
                 rx_bytes_buffer.append(rx_bytes)
                 self.free_buffer -= len(rx_bytes) - 20
+
+                if self.free_buffer < 0:
+                    self.free_buffer = 0
          
         data_final = b""
         for rcvpkt_bytes in rx_bytes_buffer:
@@ -160,6 +163,8 @@ class TCPReceiver:
                 data_final += curr_data_bytes
 
             self.free_buffer += len(rcvpkt_bytes) - 20
+            if self.free_buffer > self.rwnd_size:
+                self.free_buffer = self.rwnd_size
 
         return data_final, True
 

@@ -254,6 +254,13 @@ class TCPSender:
             # This does cumulitive ACK since we move up to the latest succesful ACK
             self.base = ackpkt.ack_num
             self.free_rx_buffer = ackpkt.window_size
+
+            if constants.DEBUG_PRINT:
+                print(
+                    f"[{datetime.now().strftime('%S.%f')}] Receiver Free Buffer Size {self.free_rx_buffer} bytes"
+                )
+            
+
             self.update_cwnd_ack(ackpkt.ack_num)
             self.clean_buffer()
             

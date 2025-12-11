@@ -16,7 +16,7 @@ class TCPSender:
         self.curr_timeout = constants.TIMEOUT_FIXED[0]
         self.sock.settimeout(self.curr_timeout)  # resend if no ACK within timeout
         self.congest_control = c_control
-        self.ssthresh = 64e3
+        self.ssthresh = 2**16-1 # 64 kB
         self.dupACKcount = 0
         self.free_rx_buffer = 2**16-1
 
@@ -188,31 +188,81 @@ class TCPSender:
         self.timeout_list.append((curr_time, self.curr_timeout))
         self.sampRTT_list.append((curr_time, sampleRTT))
 
-    def update_cwnd_ack(self, ack_num) -> None:
-        if self.congest_control == constants.SLOW_START:
-            if ack_num == self.prev_ack:
-                self.dupACKcount += 1
-            else:
-                self.prev_ack = ack_num
 
-                if self.cwnd + constants.MAX_DATA_SIZE <= self.free_rx_buffer:
-                    self.cwnd += constants.MAX_DATA_SIZE
-
-                    if constants.DEBUG_PRINT:
-                        print(f"[{datetime.now().strftime('%S.%f')}] Increasing CWND to {self.cwnd}")    
-         
-                self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
-
-    def update_cwnd_timeout(self) -> None:
-        if self.congest_control == constants.SLOW_START:
+    def slow_start(self, isTimeout) -> None:
+        if isTimeout:
             self.ssthresh = self.cwnd/2
             self.cwnd = constants.MAX_DATA_SIZE
+
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Decreasing CWND to {self.cwnd}. SSTHresh is now {self.ssthresh}")    
+
+            self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
+        else:
+            if self.cwnd >= self.ssthresh:
+                self.linear_cwnd_increase()
+            else:
+                self.exponential_cwnd_increase()
+
+
+    def linear_cwnd_increase(self) -> None:
+        potential_new_cwnd = self.cwnd + constants.MAX_DATA_SIZE * (constants.MAX_DATA_SIZE / self.cwnd)
+        if potential_new_cwnd <= self.free_rx_buffer:
+            self.cwnd = potential_new_cwnd
+
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Increasing CWND to {self.cwnd}")    
+                
+
+    def exponential_cwnd_increase(self) -> None:
+        if self.cwnd + constants.MAX_DATA_SIZE <= self.free_rx_buffer:
+            self.cwnd += constants.MAX_DATA_SIZE
+
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Increasing CWND to {self.cwnd}")    
+    
+        self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
+
+    def AIMD(self, isTimeout) -> None:
+        if isTimeout:
+            potential_cwnd = self.cwnd * 0.5
+
+            if potential_cwnd < constants.MAX_DATA_SIZE:
+                self.cwnd = constants.MAX_DATA_SIZE
+            else:
+                self.cwnd = potential_cwnd
 
             if constants.DEBUG_PRINT:
                 print(f"[{datetime.now().strftime('%S.%f')}] Decreasing CWND to {self.cwnd}")    
 
             self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
+        else:
+            self.linear_cwnd_increase()
 
+    def update_cwnd_ack(self, ack_num) -> None:
+        if ack_num == self.prev_ack:
+            self.dupACKcount += 1
+            new_ack = False
+        else:
+            self.prev_ack = ack_num
+            self.dupACKcount = 0
+            new_ack = True
+
+        if self.congest_control == constants.SLOW_START:
+            if new_ack:
+                self.slow_start(isTimeout=False)
+        elif self.congest_control == constants.AIMD:
+            if new_ack:
+                self.AIMD(isTimeout=False)
+
+   
+    def update_cwnd_timeout(self) -> None:
+        self.dupACKcount = 0
+
+        if self.congest_control == constants.SLOW_START:
+            self.slow_start(isTimeout=True)
+        elif self.congest_control == constants.AIMD:
+            self.AIMD(isTimeout=True)
 
     def input(self, last_acks: bool) -> bool:
         """Called when a packet arrives from receiver. Returns True if done waiting for input"""

@@ -6,7 +6,7 @@ from datetime import datetime
 import constants
 from Packets import DataPacket, Packet
 
-class RDT4Sender:
+class TCPSender:
     def __init__(self, sock: soc.socket, scenario: int, loss_rate: float, window_size: int, timeout: float):
         self.sock = sock
         self.sock.settimeout(timeout)  # resend if no ACK within timeout

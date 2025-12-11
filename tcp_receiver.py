@@ -6,7 +6,7 @@ from datetime import datetime
 import constants
 from Packets import AckPacket, Packet
 
-class RDT4Receiver:
+class TCPReceiver:
     def __init__(self, sock: soc.socket, scenario: int, loss_rate: float):
         self.last_sender_addr: tuple[str, int] | None = None
         self.sock = sock

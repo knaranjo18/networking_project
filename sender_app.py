@@ -6,7 +6,7 @@ from datetime import datetime
 
 from constants import *
 from Packets import DataPacket
-from rdt4_sender import RDT4Sender
+from tcp_sender import TCPSender
 
 
 def make_data_pkt(data: bytes) -> list[DataPacket]:
@@ -96,7 +96,7 @@ def send_image(bytes_image: bytes, scenario: int, loss: float, window_size: int,
 
         data_packet_list = make_data_pkt(bytes_image)
 
-        sender = RDT4Sender(tx_soc, scenario, loss, window_size, timeout)
+        sender = TCPSender(tx_soc, scenario, loss, window_size, timeout)
 
         data_idx = 0
 

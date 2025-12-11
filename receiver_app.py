@@ -5,7 +5,7 @@ import time
 
 from datetime import datetime
 from constants import *
-from rdt4_receiver import RDT4Receiver
+from tcp_receiver import TCPReceiver
 
 
 def save_bmp(data: bytes, output_name: str):
@@ -44,7 +44,7 @@ def receive_image(scenario: int, loss_rate: float):
     rx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
     with rx_soc:
         rx_soc.bind((RX_ADDR, RX_PORT))
-        receiver = RDT4Receiver(rx_soc, scenario, loss_rate)
+        receiver = TCPReceiver(rx_soc, scenario, loss_rate)
 
         # Receive initial packet that holds the number of expected packets
         while True:

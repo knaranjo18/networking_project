@@ -9,11 +9,12 @@ from Packets import DataPacket, Packet
 class TCPSender:
     def __init__(self, sock: soc.socket, scenario: int, loss_rate: float, window_size: int, timeout: float):
         self.sock = sock
+        self.curr_timeout = timeout
         self.sock.settimeout(timeout)  # resend if no ACK within timeout
 
         self.window_size = window_size
         self.sndpkt: list[DataPacket] = [
-            DataPacket(b"", 1)
+            DataPacket(b"", 1, constants.TX_PORT, constants.RX_PORT)
         ] * self.window_size  # buffer last sent packets
 
         # Keep track of window state
@@ -55,9 +56,6 @@ class TCPSender:
             self.sndpkt[self.nextseqnum % self.window_size] = curr_packet
             self.udt_send(self.sock, curr_packet.to_bytes())
             
-            if self.base == self.nextseqnum:
-                pass  # start timer handled by input() so do nothing here
-            
             self.nextseqnum += 1
             return True
         
@@ -88,7 +86,7 @@ class TCPSender:
             rcvpkt = self.udt_rcv(self.sock)
         except soc.timeout:
             if constants.DEBUG_PRINT:
-                print(f"[{datetime.now().strftime('%S.%f')}] Timed out")
+                print(f"[{datetime.now().strftime('%S.%f')}] Timed out after {self.curr_timeout / 1e-3} ms")
            
             # Resend all packets in the window on timeout
             self.do_resend()
@@ -121,7 +119,7 @@ class TCPSender:
 
         else:  # corrupt ACK
             if constants.DEBUG_PRINT:
-                print(f"[{datetime.now().strftime('%S.%f')}] Got corrupt ACK")
+                print(f"[{datetime.now().strftime('%S.%f')}] Got corrupt ACK. Ignoring.")
             
             # On the last set of transmitions even if ACK is corrupt, we slide the
             # windows as there aren't later ACKs to correctly move the window

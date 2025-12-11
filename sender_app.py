@@ -24,7 +24,7 @@ def make_data_pkt(data: bytes) -> list[DataPacket]:
     # First packet sent will contain the number of data packets to follow
     num_data_packets = num_full_pkts + 1
     num_packets_bytes = num_data_packets.to_bytes(8, "big")
-    first_packet = DataPacket(num_packets_bytes, seq_num)
+    first_packet = DataPacket(num_packets_bytes, seq_num, src_port=TX_PORT, dst_port=RX_PORT)
     seq_num += 1
 
     pkt_list.append(first_packet)
@@ -32,12 +32,12 @@ def make_data_pkt(data: bytes) -> list[DataPacket]:
     # Extract the amount of data required per packet
     for i in range(num_full_pkts):
         pkt_list.append(
-            DataPacket(data[i * MAX_DATA_SIZE : (i + 1) * MAX_DATA_SIZE], seq_num)
+            DataPacket(data[i * MAX_DATA_SIZE : (i + 1) * MAX_DATA_SIZE], seq_num, src_port=TX_PORT, dst_port=RX_PORT)
         )
         seq_num += 1  # alternates between 0 and 1
 
     # Add the last packet with padding to get the full size
-    pkt_list.append(DataPacket(data[num_full_pkts * MAX_DATA_SIZE :], seq_num))
+    pkt_list.append(DataPacket(data[num_full_pkts * MAX_DATA_SIZE :], seq_num, src_port=TX_PORT, dst_port=RX_PORT))
 
     return pkt_list
 
@@ -91,6 +91,7 @@ def send_image(bytes_image: bytes, scenario: int, loss: float, window_size: int,
 
     # Create socket that will be used to send all packets
     tx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
+    tx_soc.bind((TX_ADDR, TX_PORT))
     with tx_soc:
         # (Minimal change) Removed UDP connect; rdt4_sender uses recvfrom() for ACKs
 

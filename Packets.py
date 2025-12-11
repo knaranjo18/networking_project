@@ -161,9 +161,9 @@ class Packet:
 
 @dataclass(frozen=True)
 class DataPacket(Packet):
-    def __init__(self, data: bytes, seq_num: int):
-        object.__setattr__(self, "src_port", 0)
-        object.__setattr__(self, "dst_port", 0)
+    def __init__(self, data: bytes, seq_num: int, src_port: int, dst_port: int):
+        object.__setattr__(self, "src_port", src_port)
+        object.__setattr__(self, "dst_port", dst_port)
         object.__setattr__(self, "seq_num", seq_num)
         object.__setattr__(self, "ack_num", 0)
         object.__setattr__(self, "data_offset", 5)  # assuming no options
@@ -185,9 +185,9 @@ class DataPacket(Packet):
 
 @dataclass(frozen=True)
 class AckPacket(Packet):
-    def __init__(self, seq_num: int):
-        object.__setattr__(self, "src_port", 0)
-        object.__setattr__(self, "dst_port", 0)
+    def __init__(self, seq_num: int, src_port: int, dst_port: int):
+        object.__setattr__(self, "src_port", src_port)
+        object.__setattr__(self, "dst_port", dst_port)
         object.__setattr__(self, "seq_num", seq_num)
         object.__setattr__(self, "ack_num", 0)
         object.__setattr__(self, "data_offset", 5)  # assuming no options

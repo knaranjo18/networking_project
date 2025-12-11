@@ -11,7 +11,7 @@ class TCPReceiver:
         self.last_sender_addr: tuple[str, int] | None = None
         self.sock = sock
         self.expected_seq: int = 1
-        self.sndpkt: AckPacket = AckPacket(0)  # initial ACK for seq 0
+        self.sndpkt: AckPacket = AckPacket(0, constants.RX_PORT, constants.TX_PORT)  # initial ACK for seq 0
         self.scenario = scenario
         # normalize to 0..1 if 0..100 was passed
         self.loss_rate = (
@@ -44,7 +44,7 @@ class TCPReceiver:
 
         data_pkt = Packet(rcvpkt)
 
-        # Bad packet
+        # Bad packet - corrupt (resend ACK for previous succesfully received packet)
         if data_pkt.is_corrupt():
             if constants.DEBUG_PRINT:
                 print(
@@ -53,7 +53,7 @@ class TCPReceiver:
             self.udt_send(self.sock, self.sndpkt.to_bytes())
             return None
 
-        # Bad packet
+        # Bad packet - out of order (resend ACK for previous succesfully received packet)
         if data_pkt.seq_num != self.expected_seq:
             if constants.DEBUG_PRINT:
                 print(
@@ -66,10 +66,10 @@ class TCPReceiver:
         if not data_pkt.is_corrupt() and data_pkt.seq_num == self.expected_seq:
             if constants.DEBUG_PRINT:
                 print(
-                    f"[{datetime.now().strftime('%S.%f')}] Good packet. Seq# {data_pkt.seq_num}"
+                    f"[{datetime.now().strftime('%S.%f')}] Good packet. Sending ACK for Seq# {data_pkt.seq_num}"
                 )
 
-            self.sndpkt = AckPacket(self.expected_seq)
+            self.sndpkt = AckPacket(self.expected_seq, data_pkt.dst_port, data_pkt.src_port)
             self.expected_seq += 1
             self.udt_send(self.sock, self.sndpkt.to_bytes())
 

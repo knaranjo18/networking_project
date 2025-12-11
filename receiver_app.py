@@ -86,11 +86,12 @@ def handle_CLI() -> str:
         help="Data transfer scenario to implement.",
     )
     
-    parser.add_argument("-x", "--xtype", default="loss", type=str, help="X-axis type. loss, timeout, window")
+    parser.add_argument("-p", "--plot_single_run", action="store_true", default=False, help="Plot one run at 20% to see congestion and timeout")
+
 
     args = parser.parse_args()
 
-    return args.output_file, args.scenario, args.input_file, args.xtype
+    return args.output_file, args.scenario, args.input_file, args.plot_single_run
 
 
 def write_time_file(
@@ -124,45 +125,33 @@ def write_time_file(
 
 
 if __name__ == "__main__":
-    output_file, scenario, input_file, xtype = handle_CLI()
+    output_file, scenario, input_file, plot_single_run = handle_CLI()
 
-    if xtype == "loss":
+    if not plot_single_run:
         loss_list = LOSS_RANGE
-        window_list = WINDOW_SIZE_FIXED
-        timeout_list = TIMEOUT_FIXED
-        x_axis_val = loss_list
-    elif xtype == "window":
-        loss_list = LOSS_FIXED
-        window_list = WINDOW_SIZE_RANGE
-        timeout_list = TIMEOUT_FIXED
-        x_axis_val = window_list
-    elif xtype == "timeout":
-        loss_list = LOSS_FIXED
-        window_list = WINDOW_SIZE_FIXED
-        timeout_list = TIMEOUT_RANGE
-        x_axis_val = timeout_list
+        iter_num = NUM_ITER
     else:
-        print("Unknown xtype. Must be either 'loss', 'window', or 'timeout'")
-        exit(1)
+        loss_list = LOSS_FIXED
+        iter_num = 1
 
+    x_axis_val = loss_list
+    xtype = "loss"
 
     # Iterate over one of various variables, could be scenario loss, window size or timeout value
     x_idx = -1
     for loss in loss_list:
-        for window_size in window_list:
-            for timeout in timeout_list:
-                x_idx += 1
-                for iter in range(0, NUM_ITER):
-                    print(
-                        f"[{datetime.now().strftime('%S.%f')}] Scene {scenario}\t\t{xtype.capitalize()} {x_axis_val[x_idx]}%  \tIter {iter}"
-                    )
+        x_idx += 1
+        for iter in range(0, iter_num):
+            print(
+                f"[{datetime.now().strftime('%S.%f')}] Scene {scenario}\t\t{xtype.capitalize()} {x_axis_val[x_idx]}%  \tIter {iter}"
+            )
 
-                    image_bytes, end_time = receive_image(scenario, loss / 100)
+            image_bytes, end_time = receive_image(scenario, loss / 100)
 
-                    if not check_image(image_bytes, input_file):
-                        print("Received image does not match the original image!")
-                        exit()
+            if not check_image(image_bytes, input_file):
+                print("Received image does not match the original image!")
+                exit()
 
-                    write_time_file(scenario, iter, x_axis_val[x_idx], xtype, end_time, len(image_bytes))
+            write_time_file(scenario, iter, x_axis_val[x_idx], xtype, end_time, len(image_bytes))
 
-                    save_bmp(image_bytes, f"{output_file}")
+            save_bmp(image_bytes, f"{output_file}")

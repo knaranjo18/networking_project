@@ -70,17 +70,17 @@ def handle_CLI() -> str:
         help="Data transfer scenario to implement.",
     )
 
-    parser.add_argument("-x", "--xtype", default="loss", type=str, help="X-axis type. loss, timeout, window")
-
     parser.add_argument("-c", "--congest_control", default=1, type=int, help="Congestion control type")
+
+    parser.add_argument("-p", "--plot_single_run", action="store_true", default=False, help="Plot one run at 20% to see congestion and timeout")
 
 
     args = parser.parse_args()
 
-    return args.input_file, args.scenario, args.xtype, args.congest_control
+    return args.input_file, args.scenario, args.congest_control, args.plot_single_run
 
 
-def send_image(bytes_image: bytes, scenario: int, loss: float, congest_control: int) -> float:
+def send_image(bytes_image: bytes, scenario: int, loss: float, congest_control: int, plotting: bool) -> float:
     """Main loop that uses RDT 2.2 to send bytes to receiver"""
 
     # Create socket that will be used to send all packets
@@ -113,39 +113,82 @@ def send_image(bytes_image: bytes, scenario: int, loss: float, congest_control: 
 
         sender.close_connection()
 
-        # x_axis = []
-        # y_axis = []
-        # for x, y in sender.sampRTT_list:
-        #     x_axis.append(x)
-        #     y_axis.append(y/1e-3)
+        if plotting:
+            if scenario == NO_LOSS:
+                scene_name = f"no loss"
+            elif scenario == TX_ACK_LOSS:
+                scene_name = f"tx ack loss"
+            elif scenario == RX_DATA_LOSS:
+                scene_name = f"rx data loss"
+            elif scenario == TX_ACK_DROP:
+                scene_name = f"tx ack drop"
+            elif scenario == RX_DATA_DROP:
+                scene_name = f"rx data drop"
 
-        # plt.plot(x_axis, y_axis)
-        
-        # x_axis = []
-        # y_axis = []
-        # for x, y in sender.timeout_list:
-        #     x_axis.append(x)
-        #     y_axis.append(y/1e-3)
+            if congest_control == SLOW_START:
+                congest_name = "slow start"
+            elif congest_control == AIMD:
+                congest_name = "AIMD"
+            elif congest_control == RENO:
+                congest_name = "TCP Reno"
+            elif congest_control == TAHOE:
+                congest_name = "TCP Tahoe"
 
-        # plt.plot(x_axis, y_axis)
+            x_axis = []
+            y_axis = []
+            for x, y in sender.sampRTT_list:
+                x_axis.append(x)
+                y_axis.append(y/1e-3)
 
-        # results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
-        # file_name = f"sampRTT_plot.png"
-        # full_path = os.path.join(results_folder, file_name)
+            plt.figure(figsize=(10, 6))
+            plt.plot(x_axis, y_axis)
+            plt.xlabel("Simulation Time (s)")
+            plt.ylabel("Time (ms)")
+            
+            x_axis = []
+            y_axis = []
+            for x, y in sender.timeout_list:
+                x_axis.append(x)
+                y_axis.append(y/1e-3)
 
-        # plt.savefig(full_path)
-        # plt.close()
+            plt.plot(x_axis, y_axis)
+            plt.title(f"Round Trip Time and Timeout\nScenario: {scene_name}\nCongestion strategy: {congest_name}")
+            plt.legend(["Sample RTT", "Retransmission Timeout"])
+
+            results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+            file_name = f"RTO_RTT_{scene_name}_{congest_name}.png"
+            full_path = os.path.join(results_folder, file_name)
+
+            plt.grid()
+            plt.savefig(full_path)
+            plt.close()
 
 
-        # x_axis = []
-        # y_axis = []
-        # for x, y in sender.cwnd_list:
-        #     x_axis.append(x)
-        #     y_axis.append(y)
+            x_axis = []
+            y_axis = []
+            for x, y in sender.cwnd_list:
+                x_axis.append(x)
+                y_axis.append(y)
 
-        # plt.figure
-        # plt.plot(x_axis[0:100], y_axis[0:100], '-o')
-        # plt.savefig(os.path.join(results_folder, "cwin.png"))
+
+            plt.figure(figsize=(10, 6))
+            plt.plot(x_axis, y_axis)
+            plt.ylabel("Window size (bytes)")
+            plt.xlabel("Simulation Time (s)")
+            plt.title(f"Congestion Window Size\nScenario: {scene_name}\nCongestion strategy: {congest_name}")
+            plt.grid()
+            plt.savefig(os.path.join(results_folder, f"cwin_{scene_name}_{congest_name}.png"))
+
+
+            plt.figure(figsize=(10, 6))
+            plt.plot(x_axis[0:200], y_axis[0:200], '-o')
+            plt.ylabel("Window size (bytes)")
+            plt.xlabel("Simulation Time (s)")
+            plt.title(f"Congestion Window Size Zoomed\nScenario: {scene_name}\nCongestion strategy: {congest_name}")
+            plt.grid()
+            plt.savefig(os.path.join(results_folder, f"cwin_zoom_{scene_name}_{congest_name}.png"))
+
+
 
         return start_time
 
@@ -183,39 +226,29 @@ def write_time_file(
 
 if __name__ == "__main__":
     # Process command line arguments
-    input_file, scenario, xtype, congest_control = handle_CLI()
+    input_file, scenario, congest_control, plot_single_run = handle_CLI()
 
     bytes_image = image_file_2_bytes(input_file)
 
-    if xtype == "loss":
+    if not plot_single_run:
         loss_list = LOSS_RANGE
-        window_list = WINDOW_SIZE_FIXED
-        timeout_list = TIMEOUT_FIXED
-        x_axis_val = loss_list
-    elif xtype == "window":
-        loss_list = LOSS_FIXED
-        window_list = WINDOW_SIZE_RANGE
-        timeout_list = TIMEOUT_FIXED
-        x_axis_val = window_list
-    elif xtype == "timeout":
-        loss_list = LOSS_FIXED
-        window_list = WINDOW_SIZE_FIXED
-        timeout_list = TIMEOUT_RANGE
-        x_axis_val = timeout_list
+        iter_num = NUM_ITER
     else:
-        print("Unknown xtype. Must be either 'loss', 'window', or 'timeout'")
-        exit(1)
+        loss_list = LOSS_FIXED
+        iter_num = 1
 
-    # Iterate over loss rate between 0 to 60 percent with increments of 5
+    x_axis_val = loss_list
+
+    xtype = "loss"
+
+    # Iterate over loss rate between 0 to 70 percent with increments of 5
     x_idx = -1
     for loss in loss_list:
-        for window_size in window_list:
-            for timeout in timeout_list:
-                x_idx += 1
-                for iter in range(0, NUM_ITER):
-                    print(
-                        f"[{datetime.now().strftime('%S.%f')}] Scene {scenario}\t\t{xtype.capitalize()} {x_axis_val[x_idx]}%  \tIter {iter}"
-                    )
-                    start_time = send_image(bytes_image, scenario, loss / 100, congest_control)
-                    write_time_file(scenario, iter, x_axis_val[x_idx], xtype, start_time, len(bytes_image))
-                    time.sleep(0.15)  # Wait a second between steps for things to settle
+        x_idx += 1
+        for iter in range(0, iter_num):
+            print(
+                f"[{datetime.now().strftime('%S.%f')}] Scene {scenario}\t\t{xtype.capitalize()} {x_axis_val[x_idx]}%  \tIter {iter}"
+            )
+            start_time = send_image(bytes_image, scenario, loss / 100, congest_control, plot_single_run)
+            write_time_file(scenario, iter, x_axis_val[x_idx], xtype, start_time, len(bytes_image))
+            time.sleep(0.15)  # Wait a second between steps for things to settle

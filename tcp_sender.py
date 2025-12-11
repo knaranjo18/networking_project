@@ -202,6 +202,8 @@ class TCPSender:
         else:
             if self.cwnd < self.ssthresh:
                 self.exponential_cwnd_increase()
+            else:
+                self.linear_cwnd_increase()
 
 
     def linear_cwnd_increase(self) -> None:

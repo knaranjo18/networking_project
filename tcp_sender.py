@@ -63,9 +63,10 @@ class TCPSender:
                 if constants.DEBUG_PRINT:
                     print(f"[{datetime.now().strftime('%S.%f')}] Received good SYNACK. Sending Final ACK. Connection Established.")
                     
-                ack_packet = AckPacket(synack_pkt.seq_num + 1, src_port=constants.TX_PORT, dst_port=constants.RX_PORT)
+                ack_packet = AckPacket(ack_num=synack_pkt.seq_num + 1, src_port=constants.TX_PORT, dst_port=constants.RX_PORT, seq_num=1)
                 self.sndpkt_buffer.append(ack_packet)
-                self.udt_send(self.sock, ack_packet)
+                self.nextseqnum += 1
+                self.udt_send(self.sock, ack_packet.to_bytes())
                 connected = True
    
     def close_connection(self) -> None:
@@ -73,10 +74,10 @@ class TCPSender:
         fail_cnt = 0
         
         while fail_cnt < 8:
-            self.udt_send(self.sock, fin_pkt)
+            self.udt_send(self.sock, fin_pkt.to_bytes())
 
             if constants.DEBUG_PRINT:
-                        print(f"[{datetime.now().strftime('%S.%f')}] Ending connection, sending FIN Packet.")
+                print(f"[{datetime.now().strftime('%S.%f')}] Ending connection, sending FIN Packet.")
 
             try:
                 rcvpkt_bytes = self.udt_rcv(self.sock)
@@ -91,7 +92,6 @@ class TCPSender:
                         print(f"[{datetime.now().strftime('%S.%f')}] Received bad FINACK.")
                     fail_cnt += 1
 
-                break
             except soc.timeout:
                 if constants.DEBUG_PRINT:
                     print(f"[{datetime.now().strftime('%S.%f')}] FINACK Timed out after {self.curr_timeout / 1e-3} ms")
@@ -109,16 +109,18 @@ class TCPSender:
         Return false if reached limit of packets in flight
         """
         if self.nextseqnum < self.base + self.window_size:
-            if constants.DEBUG_PRINT:
-                print(
-                    f"[{datetime.now().strftime('%S.%f')}] Sending Base: {self.base} \t NextSeqNum: {self.nextseqnum}"
-                )
-
             # Send packet and add to buffer of previously sent packets
             self.sndpkt_buffer.append(curr_packet)
             self.udt_send(self.sock, curr_packet.to_bytes())
             
             self.nextseqnum += curr_packet.data_len
+
+            if constants.DEBUG_PRINT:
+                print(
+                    f"[{datetime.now().strftime('%S.%f')}] Sending Base: {self.base} \t NextSeqNum: {self.nextseqnum}"
+                )
+
+
             return True
         
         # window is full data cannot be sent

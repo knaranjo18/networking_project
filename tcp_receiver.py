@@ -43,12 +43,11 @@ class TCPReceiver:
         while not syn_received:
             rcvpkt_bytes = self.udt_rcv(self.sock)
             syn_pkt = Packet(rcvpkt_bytes)
-            print(syn_pkt.is_corrupt(), syn_pkt.syn)
 
             if not syn_pkt.is_corrupt() and syn_pkt.syn:
                 if constants.DEBUG_PRINT:
                     print(
-                        f"[{datetime.now().strftime('%S.%f')}] Good SYN received. Sending SYNACK"
+                        f"[{datetime.now().strftime('%S.%f')}] Good SYN received."
                     )       
                 syn_received = True
             else:
@@ -58,14 +57,21 @@ class TCPReceiver:
                     )   
 
         while not ack_received:
+            if constants.DEBUG_PRINT:
+                print(
+                    f"[{datetime.now().strftime('%S.%f')}] Sending SYNACK."
+                )  
+    
             synack_pkt = SynAcKPacket(seq_num=0, ack_num=syn_pkt.seq_num+1, src_port=constants.RX_PORT, dst_port=constants.TX_PORT)
             self.udt_send(self.sock, synack_pkt.to_bytes())
-        
+
             rcvpkt_bytes_2 = self.udt_rcv(self.sock)
             ack_pkt = Packet(rcvpkt_bytes_2)
 
             if not ack_pkt.is_corrupt() and ack_pkt.ack:
                 ack_received = True
+
+                self.expected_seq += 1
 
                 if constants.DEBUG_PRINT:
                     print(
@@ -124,7 +130,7 @@ class TCPReceiver:
 
             if constants.DEBUG_PRINT:
                 print(
-                    f"[{datetime.now().strftime('%S.%f')}] Good packet of {data_pkt.data_len} bytes. Sending ACK expecting next Seq# {self.expected_seq}"
+                    f"[{datetime.now().strftime('%S.%f')}] Good packet with seq # {data_pkt.seq_num} of length {data_pkt.data_len} bytes. Sending ACK expecting next Seq# {self.expected_seq}"
                 )
 
             self.udt_send(self.sock, self.sndpkt.to_bytes())

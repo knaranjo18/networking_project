@@ -19,7 +19,7 @@ def make_data_pkt(data: bytes) -> list[DataPacket]:
 
     pkt_list = []
 
-    seq_num = 1
+    seq_num = 2
 
     # Extract the amount of data required per packet
     for i in range(num_full_pkts):
@@ -100,7 +100,7 @@ def send_image(bytes_image: bytes, scenario: int, loss: float, window_size: int,
         while data_idx < len(data_packet_list):
             while data_idx < len(data_packet_list) and sender.tcp_send(data_packet_list[data_idx]):
                 if DEBUG_PRINT:
-                    print(f"[{datetime.now().strftime('%S.%f')}] Sent packet {data_idx + 1}")
+                    print(f"[{datetime.now().strftime('%S.%f')}] Sent packet with seq # {data_packet_list[data_idx].seq_num}")
                 data_idx += 1
             sender.input(last_acks=False)
 

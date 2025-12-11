@@ -21,6 +21,7 @@ class TCPSender:
         self.free_rx_buffer = 2**16-1
 
         self.prev_ack = -1
+        self.in_fast_recovery = False
 
         # Used to keep track of RTT and timeout and congestion window size for plotting later
         self.cwnd_list: list[tuple[float, int]] = []
@@ -195,32 +196,34 @@ class TCPSender:
             self.cwnd = constants.MAX_DATA_SIZE
 
             if constants.DEBUG_PRINT:
-                print(f"[{datetime.now().strftime('%S.%f')}] Decreasing CWND to {self.cwnd}. SSTHresh is now {self.ssthresh}")    
+                print(f"[{datetime.now().strftime('%S.%f')}] Timed out. Decreasing CWND to {self.cwnd}. SSTHresh is now {self.ssthresh}")    
 
             self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
         else:
-            if self.cwnd >= self.ssthresh:
-                self.linear_cwnd_increase()
-            else:
+            if self.cwnd < self.ssthresh:
                 self.exponential_cwnd_increase()
 
 
     def linear_cwnd_increase(self) -> None:
         potential_new_cwnd = self.cwnd + constants.MAX_DATA_SIZE * (constants.MAX_DATA_SIZE / self.cwnd)
+        
         if potential_new_cwnd <= self.free_rx_buffer:
             self.cwnd = potential_new_cwnd
 
-            if constants.DEBUG_PRINT:
-                print(f"[{datetime.now().strftime('%S.%f')}] Increasing CWND to {self.cwnd}")    
-                
+        if constants.DEBUG_PRINT:
+            print(f"[{datetime.now().strftime('%S.%f')}] Linear increase CWND is now {self.cwnd}. SSThresh is {self.ssthresh}")    
+            
+        self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
 
     def exponential_cwnd_increase(self) -> None:
-        if self.cwnd + constants.MAX_DATA_SIZE <= self.free_rx_buffer:
-            self.cwnd += constants.MAX_DATA_SIZE
+        potential_cwnd = self.cwnd + constants.MAX_DATA_SIZE
 
-            if constants.DEBUG_PRINT:
-                print(f"[{datetime.now().strftime('%S.%f')}] Increasing CWND to {self.cwnd}")    
-    
+        if potential_cwnd <= self.free_rx_buffer:
+            self.cwnd = potential_cwnd
+
+        if constants.DEBUG_PRINT:
+            print(f"[{datetime.now().strftime('%S.%f')}] Exponential increase. CWND is now {self.cwnd}. SSThresh is {self.ssthresh}")    
+
         self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
 
     def AIMD(self, isTimeout) -> None:
@@ -233,11 +236,77 @@ class TCPSender:
                 self.cwnd = potential_cwnd
 
             if constants.DEBUG_PRINT:
-                print(f"[{datetime.now().strftime('%S.%f')}] Decreasing CWND to {self.cwnd}")    
+                print(f"[{datetime.now().strftime('%S.%f')}] Timed out. Decreasing CWND to {self.cwnd}")    
 
             self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
         else:
             self.linear_cwnd_increase()
+
+    def tahoe(self, isTimeout, dupAckLimit) -> None:
+        if isTimeout or dupAckLimit:
+            self.ssthresh = self.cwnd / 2
+            self.cwnd = constants.MAX_DATA_SIZE
+
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Timed out or Duplicated Acks. Decreasing CWND to {self.cwnd}. SSTHresh is now {self.ssthresh}")    
+
+            self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
+        else:
+            if self.cwnd < self.ssthresh:
+                self.exponential_cwnd_increase()
+            else:
+                self.linear_cwnd_increase()
+
+    def reno(self, isTimeout, dupAckLimit) -> None:
+        if isTimeout:
+            self.ssthresh = self.cwnd / 2
+            self.cwnd = constants.MAX_DATA_SIZE
+
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Timed out. Decreasing CWND to {self.cwnd}. SSTHresh is now {self.ssthresh}")    
+
+            self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
+        elif dupAckLimit:
+            if self.in_fast_recovery:
+                # Slows things down
+                # potential_cwnd = self.cwnd + constants.MAX_DATA_SIZE
+
+                # if potential_cwnd <= self.free_rx_buffer:
+                #     self.cwnd = potential_cwnd
+
+                if constants.DEBUG_PRINT:
+                    print(f"[{datetime.now().strftime('%S.%f')}] In Fast Recovery. CWND is now {self.cwnd}")     
+
+                self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
+            else:
+                # Fast retransmit when entering fast recovery
+                self.do_resend()
+
+                self.ssthresh = self.cwnd / 2
+                potential_cwnd = self.ssthresh + 3 * constants.MAX_DATA_SIZE
+
+                if potential_cwnd <= self.free_rx_buffer:
+                    self.cwnd = potential_cwnd
+
+                self.in_fast_recovery = True
+
+                if constants.DEBUG_PRINT:
+                    print(f"[{datetime.now().strftime('%S.%f')}] Entering Fast Recovery. CWND is now {self.cwnd}. SSTHresh is now {self.ssthresh}")            
+
+                self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
+        else:
+            if self.in_fast_recovery:
+                self.cwnd = max(self.ssthresh, constants.MAX_DATA_SIZE)
+
+                if constants.DEBUG_PRINT:
+                    print(f"[{datetime.now().strftime('%S.%f')}] Exiting fast recovery due to new ACK")
+
+                self.in_fast_recovery = False
+
+            if self.cwnd < self.ssthresh:
+                self.exponential_cwnd_increase()
+            else:
+                self.linear_cwnd_increase()           
 
     def update_cwnd_ack(self, ack_num) -> None:
         if ack_num == self.prev_ack:
@@ -254,8 +323,32 @@ class TCPSender:
         elif self.congest_control == constants.AIMD:
             if new_ack:
                 self.AIMD(isTimeout=False)
+        elif self.congest_control == constants.TAHOE:
+            if new_ack:
+                self.tahoe(isTimeout=False, dupAckLimit=False)
+            elif self.dupACKcount == 3:
+                if constants.DEBUG_PRINT:
+                    print(f"[{datetime.now().strftime('%S.%f')}] {self.dupACKcount} duplicate ACKs received. Retransmitting and reducing window.")    
+
+                # Fast Retransmit
+                self.do_resend()
 
    
+
+                self.tahoe(isTimeout=False, dupAckLimit=True)
+                self.dupACKcount = 0
+        elif self.congest_control == constants.RENO:
+            if new_ack:
+                self.reno(isTimeout=False, dupAckLimit=False)
+            elif self.dupACKcount >= 3:            
+                if constants.DEBUG_PRINT:
+                    print(f"[{datetime.now().strftime('%S.%f')}] {self.dupACKcount} duplicate ACKs received.")    
+
+                self.reno(isTimeout=False,dupAckLimit=True)
+        else:
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Unknown congestion control. Skipping.")
+
     def update_cwnd_timeout(self) -> None:
         self.dupACKcount = 0
 
@@ -263,6 +356,13 @@ class TCPSender:
             self.slow_start(isTimeout=True)
         elif self.congest_control == constants.AIMD:
             self.AIMD(isTimeout=True)
+        elif self.congest_control == constants.TAHOE:
+            self.tahoe(isTimeout=True, dupAckLimit=False)
+        elif self.congest_control == constants.RENO:
+            self.reno(isTimeout=True, dupAckLimit=False)
+        else:
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Unknown congestion control. Skipping.")
 
     def input(self, last_acks: bool) -> bool:
         """Called when a packet arrives from receiver. Returns True if done waiting for input"""

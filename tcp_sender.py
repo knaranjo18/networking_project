@@ -11,10 +11,16 @@ ALPHA = 0.125
 BETA = 0.25
 
 class TCPSender:
-    def __init__(self, sock: soc.socket, scenario: int, loss_rate: float, init_window_size: int, init_timeout: float):
+    def __init__(self, sock: soc.socket, scenario: int, loss_rate: float, c_control: int):
         self.sock = sock
-        self.curr_timeout = init_timeout
-        self.sock.settimeout(init_timeout)  # resend if no ACK within timeout
+        self.curr_timeout = constants.TIMEOUT_FIXED[0]
+        self.sock.settimeout(self.curr_timeout)  # resend if no ACK within timeout
+        self.congest_control = c_control
+        self.ssthresh = 64e3
+        self.dupACKcount = 0
+        self.free_rx_buffer = 2**16-1
+
+        self.prev_ack = -1
 
         # Used to keep track of RTT and timeout and congestion window size for plotting later
         self.cwnd_list: list[tuple[float, int]] = []
@@ -26,7 +32,7 @@ class TCPSender:
         self.estimatedRTT = None
         self.devRTT = None
 
-        self.window_size = init_window_size
+        self.cwnd = constants.MAX_DATA_SIZE
         self.sndpkt_buffer: deque[tuple[DataPacket, float]] = deque()
 
         # Keep track of window state
@@ -119,7 +125,7 @@ class TCPSender:
         Called by application to send one chunk of data. Return true of able to succesfully send packet. 
         Return false if reached limit of packets in flight
         """
-        if self.nextseqnum < self.base + self.window_size:
+        if self.nextseqnum < self.base + self.cwnd and (self.nextseqnum - self.base) < self.free_rx_buffer:
             # Send packet and add to buffer of previously sent packets
             self.sndpkt_buffer.append((curr_packet, time.time()))
             self.udt_send(self.sock, curr_packet.to_bytes())
@@ -130,7 +136,6 @@ class TCPSender:
                 print(
                     f"[{datetime.now().strftime('%S.%f')}] Sending Base: {self.base} \t NextSeqNum: {self.nextseqnum}"
                 )
-
             return True
         
         # window is full data cannot be sent
@@ -183,6 +188,32 @@ class TCPSender:
         self.timeout_list.append((curr_time, self.curr_timeout))
         self.sampRTT_list.append((curr_time, sampleRTT))
 
+    def update_cwnd_ack(self, ack_num) -> None:
+        if self.congest_control == constants.SLOW_START:
+            if ack_num == self.prev_ack:
+                self.dupACKcount += 1
+            else:
+                self.prev_ack = ack_num
+
+                if self.cwnd + constants.MAX_DATA_SIZE <= self.free_rx_buffer:
+                    self.cwnd += constants.MAX_DATA_SIZE
+
+                    if constants.DEBUG_PRINT:
+                        print(f"[{datetime.now().strftime('%S.%f')}] Increasing CWND to {self.cwnd}")    
+         
+                self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
+
+    def update_cwnd_timeout(self) -> None:
+        if self.congest_control == constants.SLOW_START:
+            self.ssthresh = self.cwnd/2
+            self.cwnd = constants.MAX_DATA_SIZE
+
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Decreasing CWND to {self.cwnd}")    
+
+            self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
+
+
     def input(self, last_acks: bool) -> bool:
         """Called when a packet arrives from receiver. Returns True if done waiting for input"""
 
@@ -200,6 +231,7 @@ class TCPSender:
             if constants.DEBUG_PRINT:
                 print(f"[{datetime.now().strftime('%S.%f')}] Timed out after {self.curr_timeout / 1e-3} ms")
            
+            self.update_cwnd_timeout()
             # Resend all packets in the window on timeout
             self.do_resend()
             
@@ -221,6 +253,8 @@ class TCPSender:
 
             # This does cumulitive ACK since we move up to the latest succesful ACK
             self.base = ackpkt.ack_num
+            self.free_rx_buffer = ackpkt.window_size
+            self.update_cwnd_ack(ackpkt.ack_num)
             self.clean_buffer()
             
             if self.base == self.nextseqnum:

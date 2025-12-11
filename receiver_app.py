@@ -53,13 +53,8 @@ def receive_image(scenario: int, loss_rate: float):
         data_pkt_list: list[bytes] = []
 
         while connected:
-            curr_pkt = receiver.get_data()
-
-            if curr_pkt:
-                if curr_pkt == -1:
-                    connected = False
-                else:
-                    data_pkt_list.append(curr_pkt)
+            curr_pkt, connected = receiver.get_data()
+            data_pkt_list.append(curr_pkt)
 
         end_time = time.time()
 

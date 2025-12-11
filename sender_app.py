@@ -7,7 +7,7 @@ from datetime import datetime
 from constants import *
 from Packets import DataPacket
 from tcp_sender import TCPSender
-
+import matplotlib.pyplot as plt
 
 def make_data_pkt(data: bytes) -> list[DataPacket]:
     """Helper function that takes an array of bytes and converts it to a list of Data Packets."""
@@ -72,12 +72,15 @@ def handle_CLI() -> str:
 
     parser.add_argument("-x", "--xtype", default="loss", type=str, help="X-axis type. loss, timeout, window")
 
+    parser.add_argument("-c", "--congest_control", default=1, type=int, help="Congestion control type")
+
+
     args = parser.parse_args()
 
-    return args.input_file, args.scenario, args.xtype
+    return args.input_file, args.scenario, args.xtype, args.congest_control
 
 
-def send_image(bytes_image: bytes, scenario: int, loss: float, window_size: int, timeout: float) -> float:
+def send_image(bytes_image: bytes, scenario: int, loss: float, congest_control: int) -> float:
     """Main loop that uses RDT 2.2 to send bytes to receiver"""
 
     # Create socket that will be used to send all packets
@@ -88,7 +91,7 @@ def send_image(bytes_image: bytes, scenario: int, loss: float, window_size: int,
 
         data_packet_list = make_data_pkt(bytes_image)
 
-        sender = TCPSender(tx_soc, scenario, loss, window_size, timeout)
+        sender = TCPSender(tx_soc, scenario, loss, congest_control)
 
         data_idx = 0
 
@@ -109,6 +112,40 @@ def send_image(bytes_image: bytes, scenario: int, loss: float, window_size: int,
             pass
 
         sender.close_connection()
+
+        # x_axis = []
+        # y_axis = []
+        # for x, y in sender.sampRTT_list:
+        #     x_axis.append(x)
+        #     y_axis.append(y/1e-3)
+
+        # plt.plot(x_axis, y_axis)
+        
+        # x_axis = []
+        # y_axis = []
+        # for x, y in sender.timeout_list:
+        #     x_axis.append(x)
+        #     y_axis.append(y/1e-3)
+
+        # plt.plot(x_axis, y_axis)
+
+        # results_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+        # file_name = f"sampRTT_plot.png"
+        # full_path = os.path.join(results_folder, file_name)
+
+        # plt.savefig(full_path)
+        # plt.close()
+
+
+        # x_axis = []
+        # y_axis = []
+        # for x, y in sender.cwnd_list:
+        #     x_axis.append(x)
+        #     y_axis.append(y)
+
+        # plt.figure
+        # plt.plot(x_axis[0:100], y_axis[0:100], '-o')
+        # plt.savefig(os.path.join(results_folder, "cwin.png"))
 
         return start_time
 
@@ -146,7 +183,7 @@ def write_time_file(
 
 if __name__ == "__main__":
     # Process command line arguments
-    input_file, scenario, xtype = handle_CLI()
+    input_file, scenario, xtype, congest_control = handle_CLI()
 
     bytes_image = image_file_2_bytes(input_file)
 
@@ -179,6 +216,6 @@ if __name__ == "__main__":
                     print(
                         f"[{datetime.now().strftime('%S.%f')}] Scene {scenario}\t\t{xtype.capitalize()} {x_axis_val[x_idx]}%  \tIter {iter}"
                     )
-                    start_time = send_image(bytes_image, scenario, loss / 100, window_size, timeout)
+                    start_time = send_image(bytes_image, scenario, loss / 100, congest_control)
                     write_time_file(scenario, iter, x_axis_val[x_idx], xtype, start_time, len(bytes_image))
                     time.sleep(0.15)  # Wait a second between steps for things to settle

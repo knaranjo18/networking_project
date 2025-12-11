@@ -2,17 +2,22 @@ import random
 import socket as soc
 import time
 from datetime import datetime
+import select
 
 import constants
 from Packets import AckPacket, Packet, SynAcKPacket, FinAckPacket
+from math import ceil
 
 class TCPReceiver:
     def __init__(self, sock: soc.socket, scenario: int, loss_rate: float):
         self.last_sender_addr: tuple[str, int] | None = None
         self.sock = sock
+
         self.expected_seq: int = 1
         self.sndpkt: AckPacket = AckPacket(0, constants.RX_PORT, constants.TX_PORT)  # initial ACK for seq 0
         self.scenario = scenario
+        self.rwnd_size = 2**16 - 1 # 8 kB rx buffer
+        self.free_buffer = self.rwnd_size
         # normalize to 0..1 if 0..100 was passed
         self.loss_rate = (
             loss_rate
@@ -83,23 +88,15 @@ class TCPReceiver:
                         f"[{datetime.now().strftime('%S.%f')}] Bad ACK received."
                     )       
 
-
-    def get_data(self) -> bytes | None:
-        "Called by application to get received data, returns None if data is corrupted and -1 if connection done"
-        
-        # Receive packet and potentially corrupt it
-        rcvpkt_bytes = self.udt_rcv(self.sock)
-        rcvpkt_bytes = self.__corrupt_data_bytes(rcvpkt_bytes)
-
-        data_pkt = Packet(rcvpkt_bytes)
-
+    def process_packet(self, data_pkt: Packet):
         # Bad packet - corrupt (resend ACK for previous succesfully received packet)
         if data_pkt.is_corrupt():
             if constants.DEBUG_PRINT:
                 print(
                     f"[{datetime.now().strftime('%S.%f')}] Packet corrupt. Resending ACK # {self.sndpkt.ack_num}"
                 )
-            self.udt_send(self.sock, self.sndpkt.to_bytes())
+            resend_pkt = AckPacket(self.sndpkt.ack_num, self.sndpkt.src_port, self.sndpkt.dst_port, free_window=self.free_buffer)
+            self.udt_send(self.sock, resend_pkt.to_bytes())
             return None
 
         # Bad packet - out of order (resend ACK for previous succesfully received packet)
@@ -108,7 +105,8 @@ class TCPReceiver:
                 print(
                     f"[{datetime.now().strftime('%S.%f')}] Got packet # {data_pkt.seq_num}; # {self.expected_seq} was expected. Resending ACK # {self.sndpkt.ack_num}"
                 )
-            self.udt_send(self.sock, self.sndpkt.to_bytes())
+            resend_pkt = AckPacket(self.sndpkt.ack_num, self.sndpkt.src_port, self.sndpkt.dst_port, free_window=self.free_buffer)
+            self.udt_send(self.sock, resend_pkt.to_bytes())
             return None
 
         # Good packet
@@ -126,7 +124,7 @@ class TCPReceiver:
 
 
             self.expected_seq += data_pkt.data_len
-            self.sndpkt = AckPacket(self.expected_seq, data_pkt.dst_port, data_pkt.src_port)
+            self.sndpkt = AckPacket(self.expected_seq, data_pkt.dst_port, data_pkt.src_port, free_window=self.free_buffer)
 
             if constants.DEBUG_PRINT:
                 print(
@@ -137,6 +135,33 @@ class TCPReceiver:
 
             return data_pkt.data
 
+    def get_data(self) -> tuple[bytes, bool] | tuple[None, bool]:
+        "Called by application to get received data, returns None if data is corrupted and -1 if connection done"
+        rx_bytes_buffer = []
+        readable = True
+        while readable:
+            readable, _, _ = select.select([self.sock], [], [], 0)
+
+            if readable:
+                rx_bytes = self.udt_rcv(self.sock)
+                rx_bytes_buffer.append(rx_bytes)
+                self.free_buffer -= len(rx_bytes) - 20
+         
+        data_final = b""
+        for rcvpkt_bytes in rx_bytes_buffer:
+            # Receive packet and potentially corrupt it
+            rcvpkt_bytes = self.__corrupt_data_bytes(rcvpkt_bytes)
+            data_pkt = Packet(rcvpkt_bytes)
+            curr_data_bytes = self.process_packet(data_pkt)
+
+            if curr_data_bytes == -1:
+                return data_final, False
+            elif curr_data_bytes:
+                data_final += curr_data_bytes
+
+            self.free_buffer += len(rcvpkt_bytes) - 20
+
+        return data_final, True
 
     def __drop_ACK_packet(self) -> bool:
         dropPacket = False

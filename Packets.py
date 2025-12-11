@@ -188,7 +188,7 @@ class DataPacket(Packet):
 
 @dataclass(frozen=True)
 class AckPacket(Packet):
-    def __init__(self, ack_num: int, src_port: int, dst_port: int, seq_num: int = 0):
+    def __init__(self, ack_num: int, src_port: int, dst_port: int, seq_num: int = 0, free_window: int =  2**16 - 1):
         object.__setattr__(self, "src_port", src_port)
         object.__setattr__(self, "dst_port", dst_port)
         object.__setattr__(self, "seq_num", seq_num)
@@ -202,7 +202,7 @@ class AckPacket(Packet):
         object.__setattr__(self, "rst", False)
         object.__setattr__(self, "syn", False)
         object.__setattr__(self, "fin", False)
-        object.__setattr__(self, "window_size", 0)
+        object.__setattr__(self, "window_size", free_window)
         object.__setattr__(self, "checksum", 0)  # will be calculated later
         object.__setattr__(self, "urgent_pointer", 0)
         object.__setattr__(self, "data", b"")

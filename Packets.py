@@ -59,6 +59,7 @@ class Packet:
     checksum: int  # checksum of the packet
     urgent_pointer: int  # urgent pointer
     data: bytes  # payload data
+    data_len: int # length of data in bytes
 
     def __init__(self, raw_data: bytes):
         src_port = int.from_bytes(
@@ -109,6 +110,7 @@ class Packet:
         )
 
         object.__setattr__(self, "data", raw_data[self.data_offset * 4 :])
+        object.__setattr__(self, "data_len", len(self.data))
 
     def to_bytes(self) -> bytes:
         parts: list[bytes] = []
@@ -179,17 +181,18 @@ class DataPacket(Packet):
         object.__setattr__(self, "checksum", 0)  # will be calculated later
         object.__setattr__(self, "urgent_pointer", 0)
         object.__setattr__(self, "data", data)
+        object.__setattr__(self, "data_len", len(data))
 
         object.__setattr__(self, "checksum", self.compute_checksum())
 
 
 @dataclass(frozen=True)
 class AckPacket(Packet):
-    def __init__(self, seq_num: int, src_port: int, dst_port: int):
+    def __init__(self, ack_num: int, src_port: int, dst_port: int):
         object.__setattr__(self, "src_port", src_port)
         object.__setattr__(self, "dst_port", dst_port)
-        object.__setattr__(self, "seq_num", seq_num)
-        object.__setattr__(self, "ack_num", 0)
+        object.__setattr__(self, "seq_num", 0)
+        object.__setattr__(self, "ack_num", ack_num)
         object.__setattr__(self, "data_offset", 5)  # assuming no options
         object.__setattr__(self, "cwr", False)
         object.__setattr__(self, "ece", False)
@@ -203,5 +206,44 @@ class AckPacket(Packet):
         object.__setattr__(self, "checksum", 0)  # will be calculated later
         object.__setattr__(self, "urgent_pointer", 0)
         object.__setattr__(self, "data", b"")
+        object.__setattr__(self, "data_len", 0)
 
+        object.__setattr__(self, "checksum", self.compute_checksum())
+
+
+
+@dataclass(frozen=True)
+class SynPacket(DataPacket):
+    def __init__(self, seq_num: int, src_port: int, dst_port: int):
+        super().__init__(b"", seq_num, src_port, dst_port)
+
+        object.__setattr__(self, "syn", True)
+        object.__setattr__(self, "checksum", self.compute_checksum())
+
+
+
+@dataclass(frozen=True)
+class SynAcKPacket(SynPacket):
+    def __init__(self, seq_num: int, ack_num: int, src_port: int, dst_port: int):
+        super().__init__(seq_num, src_port, dst_port)
+
+        object.__setattr__(self, "ack_num", ack_num)
+        object.__setattr__(self, "ack", True)
+        object.__setattr__(self, "checksum", self.compute_checksum())
+
+
+@dataclass(frozen=True)
+class FinPacket(DataPacket):
+    def __init__(self, seq_num: int, src_port: int, dst_port: int):
+        super().__init__(b"", seq_num, src_port, dst_port)
+
+        object.__setattr__(self, "fin", True)
+        object.__setattr__(self, "checksum", self.compute_checksum())
+
+@dataclass(frozen=True)
+class FinAckPacket(FinPacket):
+    def __init__(self, seq_num: int, src_port: int, dst_port: int):
+        super().__init__(seq_num, src_port, dst_port)
+
+        object.__setattr__(self, "ack", True)
         object.__setattr__(self, "checksum", self.compute_checksum())

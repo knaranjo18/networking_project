@@ -42,27 +42,24 @@ def check_image(data: bytes, image_file_name: str) -> bool:
 
 def receive_image(scenario: int, loss_rate: float):
     rx_soc = soc.socket(soc.AF_INET, soc.SOCK_DGRAM)
+
     with rx_soc:
         rx_soc.bind((RX_ADDR, RX_PORT))
         receiver = TCPReceiver(rx_soc, scenario, loss_rate)
 
-        # Receive initial packet that holds the number of expected packets
-        while True:
-            init_pkt = receiver.get_data()
-            if init_pkt:
-                num_pkts = int.from_bytes(init_pkt, "big")
-                break
-
-        data_pkt_idx = 1
+        receiver.establish_connection()
+        connected = True
 
         data_pkt_list: list[bytes] = []
 
-        while data_pkt_idx <= num_pkts:
+        while connected:
             curr_pkt = receiver.get_data()
 
             if curr_pkt:
-                data_pkt_list.append(curr_pkt)
-                data_pkt_idx += 1
+                if curr_pkt == -1:
+                    connected = False
+                else:
+                    data_pkt_list.append(curr_pkt)
 
         end_time = time.time()
 

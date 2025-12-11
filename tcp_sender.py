@@ -4,18 +4,17 @@ import time
 from datetime import datetime
 
 import constants
-from Packets import DataPacket, Packet
+from Packets import DataPacket, Packet, SynPacket, FinPacket, AckPacket
+from collections import deque
 
 class TCPSender:
-    def __init__(self, sock: soc.socket, scenario: int, loss_rate: float, window_size: int, timeout: float):
+    def __init__(self, sock: soc.socket, scenario: int, loss_rate: float, init_window_size: int, init_timeout: float):
         self.sock = sock
-        self.curr_timeout = timeout
-        self.sock.settimeout(timeout)  # resend if no ACK within timeout
+        self.curr_timeout = init_timeout
+        self.sock.settimeout(init_timeout)  # resend if no ACK within timeout
 
-        self.window_size = window_size
-        self.sndpkt: list[DataPacket] = [
-            DataPacket(b"", 1, constants.TX_PORT, constants.RX_PORT)
-        ] * self.window_size  # buffer last sent packets
+        self.window_size = init_window_size
+        self.sndpkt_buffer: deque[DataPacket] = deque()
 
         # Keep track of window state
         self.base = 1
@@ -41,7 +40,70 @@ class TCPSender:
         if not self.__drop_Data_packet():
             sock.sendto(pkt, (constants.RX_ADDR, constants.RX_PORT))
 
-    def rdt_send(self, curr_packet: DataPacket) -> bool:
+    def establish_connection(self) -> None:
+        syn_packet = SynPacket(seq_num=0, src_port=constants.TX_PORT, dst_port=constants.RX_PORT)
+        connected = False
+        
+        while not connected:
+            self.udt_send(self.sock, syn_packet.to_bytes())
+
+            if constants.DEBUG_PRINT:
+                print(f"[{datetime.now().strftime('%S.%f')}] Sent SYN packet")
+            
+            try:
+                rcvpkt_bytes = self.udt_rcv(self.sock)
+                synack_pkt = Packet(rcvpkt_bytes)
+            except soc.timeout:
+                if constants.DEBUG_PRINT:
+                    print(f"[{datetime.now().strftime('%S.%f')}] SYN Timed out after {self.curr_timeout / 1e-3} ms")
+                
+                continue
+
+            if not synack_pkt.is_corrupt() and synack_pkt.syn and synack_pkt.ack:
+                if constants.DEBUG_PRINT:
+                    print(f"[{datetime.now().strftime('%S.%f')}] Received good SYNACK. Sending Final ACK. Connection Established.")
+                    
+                ack_packet = AckPacket(synack_pkt.seq_num + 1, src_port=constants.TX_PORT, dst_port=constants.RX_PORT)
+                self.sndpkt_buffer.append(ack_packet)
+                self.udt_send(self.sock, ack_packet)
+                connected = True
+   
+    def close_connection(self) -> None:
+        fin_pkt = FinPacket(self.nextseqnum, constants.TX_PORT, constants.RX_PORT)
+        fail_cnt = 0
+        
+        while fail_cnt < 8:
+            self.udt_send(self.sock, fin_pkt)
+
+            if constants.DEBUG_PRINT:
+                        print(f"[{datetime.now().strftime('%S.%f')}] Ending connection, sending FIN Packet.")
+
+            try:
+                rcvpkt_bytes = self.udt_rcv(self.sock)
+                finack_pkt = Packet(rcvpkt_bytes)
+
+                if not finack_pkt.is_corrupt() and finack_pkt.ack and finack_pkt.fin:
+                    if constants.DEBUG_PRINT:
+                        print(f"[{datetime.now().strftime('%S.%f')}] Received good FINACK. Connection Ended.")
+                    return
+                else:
+                    if constants.DEBUG_PRINT:
+                        print(f"[{datetime.now().strftime('%S.%f')}] Received bad FINACK.")
+                    fail_cnt += 1
+
+                break
+            except soc.timeout:
+                if constants.DEBUG_PRINT:
+                    print(f"[{datetime.now().strftime('%S.%f')}] FINACK Timed out after {self.curr_timeout / 1e-3} ms")
+                
+                fail_cnt += 1
+
+        if constants.DEBUG_PRINT:
+            print(f"[{datetime.now().strftime('%S.%f')}] FIN Packet ACK timed out 8 times. Connection ended")
+
+
+
+    def tcp_send(self, curr_packet: DataPacket) -> bool:
         """
         Called by application to send one chunk of data. Return true of able to succesfully send packet. 
         Return false if reached limit of packets in flight
@@ -52,11 +114,11 @@ class TCPSender:
                     f"[{datetime.now().strftime('%S.%f')}] Sending Base: {self.base} \t NextSeqNum: {self.nextseqnum}"
                 )
 
-            # Send packet and add to buffer of previosly sent packets
-            self.sndpkt[self.nextseqnum % self.window_size] = curr_packet
+            # Send packet and add to buffer of previously sent packets
+            self.sndpkt_buffer.append(curr_packet)
             self.udt_send(self.sock, curr_packet.to_bytes())
             
-            self.nextseqnum += 1
+            self.nextseqnum += curr_packet.data_len
             return True
         
         # window is full data cannot be sent
@@ -64,12 +126,18 @@ class TCPSender:
 
     def do_resend(self) -> None:
         """Resend all packets in the window starting from base to nextseqnum-1"""
-        for seq in range(self.base, self.nextseqnum):
+        for resend_pkt in self.sndpkt_buffer:
             if constants.DEBUG_PRINT:
-                print(f"[{datetime.now().strftime('%S.%f')}] Resending seq#{seq}")
+                print(f"[{datetime.now().strftime('%S.%f')}] Resending seq#{resend_pkt.seq_num}")
             
-            pkt = self.sndpkt[seq % self.window_size]
-            self.udt_send(self.sock, pkt.to_bytes())
+            self.udt_send(self.sock, resend_pkt.to_bytes())
+
+    def clean_buffer(self) -> None:
+        while True:
+            if self.sndpkt_buffer and self.sndpkt_buffer[0].seq_num < self.base:
+                self.sndpkt_buffer.popleft()
+            else:
+                break
 
     def input(self, last_acks: bool) -> bool:
         """Called when a packet arrives from receiver. Returns True if done waiting for input"""
@@ -79,11 +147,11 @@ class TCPSender:
             return True
 
         # No packets sent yet, need to keep waiting
-        if len(self.sndpkt) == 0:
+        if len(self.sndpkt_buffer) == 0:
             return False
 
         try:
-            rcvpkt = self.udt_rcv(self.sock)
+            rcvpkt_bytes = self.udt_rcv(self.sock)
         except soc.timeout:
             if constants.DEBUG_PRINT:
                 print(f"[{datetime.now().strftime('%S.%f')}] Timed out after {self.curr_timeout / 1e-3} ms")
@@ -94,21 +162,22 @@ class TCPSender:
             # restart timer same as just waiting again
             return False
 
-        rcvpkt = self.__corrupt_ACK_bytes(rcvpkt)
-        ackpkt = Packet(rcvpkt)
+        rcvpkt_bytes = self.__corrupt_ACK_bytes(rcvpkt_bytes)
+        ackpkt = Packet(rcvpkt_bytes)
         
         if not ackpkt.is_corrupt():
             if constants.DEBUG_PRINT:
                 print(
-                    f"[{datetime.now().strftime('%S.%f')}] Got ACK for seq num# {ackpkt.seq_num}"
+                    f"[{datetime.now().strftime('%S.%f')}] Got ACK num# {ackpkt.ack_num}"
                 )
             
             # Theoretically we can make the sequence number go backwards due to sequential file transfers, exit early in this case
-            if ackpkt.seq_num < self.base and constants.TX_ACK_DROP == self.scenario:
+            if ackpkt.ack_num < self.base and constants.TX_ACK_DROP == self.scenario:
                 return True
 
             # This does cumulitive ACK since we move up to the lastest succesful ACK
-            self.base = ackpkt.seq_num + 1
+            self.base = ackpkt.ack_num
+            self.clean_buffer()
             
             if self.base == self.nextseqnum:
                 return True  # stop timer 

@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 
 import constants
-from Packets import AckPacket, Packet
+from Packets import AckPacket, Packet, SynAcKPacket, FinAckPacket
 
 class TCPReceiver:
     def __init__(self, sock: soc.socket, scenario: int, loss_rate: float):
@@ -35,20 +35,63 @@ class TCPReceiver:
             if not self.__drop_ACK_packet():
                 sock.sendto(pkt, self.last_sender_addr)
 
+
+    def establish_connection(self):
+        syn_received = False
+        ack_received = False
+
+        while not syn_received:
+            rcvpkt_bytes = self.udt_rcv(self.sock)
+            syn_pkt = Packet(rcvpkt_bytes)
+            print(syn_pkt.is_corrupt(), syn_pkt.syn)
+
+            if not syn_pkt.is_corrupt() and syn_pkt.syn:
+                if constants.DEBUG_PRINT:
+                    print(
+                        f"[{datetime.now().strftime('%S.%f')}] Good SYN received. Sending SYNACK"
+                    )       
+                syn_received = True
+            else:
+                if constants.DEBUG_PRINT:
+                    print(
+                        f"[{datetime.now().strftime('%S.%f')}] Bad SYN received."
+                    )   
+
+        while not ack_received:
+            synack_pkt = SynAcKPacket(seq_num=0, ack_num=syn_pkt.seq_num+1, src_port=constants.RX_PORT, dst_port=constants.TX_PORT)
+            self.udt_send(self.sock, synack_pkt.to_bytes())
+        
+            rcvpkt_bytes_2 = self.udt_rcv(self.sock)
+            ack_pkt = Packet(rcvpkt_bytes_2)
+
+            if not ack_pkt.is_corrupt() and ack_pkt.ack:
+                ack_received = True
+
+                if constants.DEBUG_PRINT:
+                    print(
+                        f"[{datetime.now().strftime('%S.%f')}] Final ACK received. Connection established."
+                    )                  
+            else:
+                if constants.DEBUG_PRINT:
+                    print(
+                        f"[{datetime.now().strftime('%S.%f')}] Bad ACK received."
+                    )       
+
+
     def get_data(self) -> bytes | None:
-        "Called by application to get received data, returns None if data is corrupted"
+        "Called by application to get received data, returns None if data is corrupted and -1 if connection done"
         
         # Receive packet and potentially corrupt it
-        rcvpkt = self.udt_rcv(self.sock)
-        rcvpkt = self.__corrupt_data_bytes(rcvpkt)
+        rcvpkt_bytes = self.udt_rcv(self.sock)
+        rcvpkt_bytes = self.__corrupt_data_bytes(rcvpkt_bytes)
 
-        data_pkt = Packet(rcvpkt)
+        data_pkt = Packet(rcvpkt_bytes)
 
         # Bad packet - corrupt (resend ACK for previous succesfully received packet)
         if data_pkt.is_corrupt():
             if constants.DEBUG_PRINT:
                 print(
-                    f"[{datetime.now().strftime('%S.%f')}] Packet corrupt. Resending ACK {self.sndpkt.seq_num}"
+                    f"[{datetime.now().strftime('%S.%f')}] Packet corrupt. Resending ACK # {self.sndpkt.ack_num}"
                 )
             self.udt_send(self.sock, self.sndpkt.to_bytes())
             return None
@@ -57,20 +100,33 @@ class TCPReceiver:
         if data_pkt.seq_num != self.expected_seq:
             if constants.DEBUG_PRINT:
                 print(
-                    f"[{datetime.now().strftime('%S.%f')}] Got packet # {data_pkt.seq_num}; # {self.expected_seq} was expected. Resending ACK {self.sndpkt.seq_num}"
+                    f"[{datetime.now().strftime('%S.%f')}] Got packet # {data_pkt.seq_num}; # {self.expected_seq} was expected. Resending ACK # {self.sndpkt.ack_num}"
                 )
             self.udt_send(self.sock, self.sndpkt.to_bytes())
             return None
 
         # Good packet
         if not data_pkt.is_corrupt() and data_pkt.seq_num == self.expected_seq:
+            
+            # End connection
+            if data_pkt.fin:
+                if constants.DEBUG_PRINT:
+                    print(
+                        f"[{datetime.now().strftime('%S.%f')}] Received FIN Packet. Sending FINACK. Closing connection"
+                    )
+                fin_ack = FinAckPacket(0, data_pkt.dst_port, data_pkt.src_port)
+                self.udt_send(self.sock, fin_ack.to_bytes())
+                return -1
+
+
+            self.expected_seq += data_pkt.data_len
+            self.sndpkt = AckPacket(self.expected_seq, data_pkt.dst_port, data_pkt.src_port)
+
             if constants.DEBUG_PRINT:
                 print(
-                    f"[{datetime.now().strftime('%S.%f')}] Good packet. Sending ACK for Seq# {data_pkt.seq_num}"
+                    f"[{datetime.now().strftime('%S.%f')}] Good packet of {data_pkt.data_len} bytes. Sending ACK expecting next Seq# {self.expected_seq}"
                 )
 
-            self.sndpkt = AckPacket(self.expected_seq, data_pkt.dst_port, data_pkt.src_port)
-            self.expected_seq += 1
             self.udt_send(self.sock, self.sndpkt.to_bytes())
 
             return data_pkt.data

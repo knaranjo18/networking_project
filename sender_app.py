@@ -21,20 +21,11 @@ def make_data_pkt(data: bytes) -> list[DataPacket]:
 
     seq_num = 1
 
-    # First packet sent will contain the number of data packets to follow
-    num_data_packets = num_full_pkts + 1
-    num_packets_bytes = num_data_packets.to_bytes(8, "big")
-    first_packet = DataPacket(num_packets_bytes, seq_num, src_port=TX_PORT, dst_port=RX_PORT)
-    seq_num += 1
-
-    pkt_list.append(first_packet)
-
     # Extract the amount of data required per packet
     for i in range(num_full_pkts):
-        pkt_list.append(
-            DataPacket(data[i * MAX_DATA_SIZE : (i + 1) * MAX_DATA_SIZE], seq_num, src_port=TX_PORT, dst_port=RX_PORT)
-        )
-        seq_num += 1  # alternates between 0 and 1
+        curr_pkt =  DataPacket(data[i * MAX_DATA_SIZE : (i + 1) * MAX_DATA_SIZE], seq_num, src_port=TX_PORT, dst_port=RX_PORT)
+        pkt_list.append(curr_pkt)
+        seq_num += curr_pkt.data_len
 
     # Add the last packet with padding to get the full size
     pkt_list.append(DataPacket(data[num_full_pkts * MAX_DATA_SIZE :], seq_num, src_port=TX_PORT, dst_port=RX_PORT))
@@ -103,17 +94,21 @@ def send_image(bytes_image: bytes, scenario: int, loss: float, window_size: int,
 
         start_time = time.time()
 
+        sender.establish_connection()
+
         # Sends all data packets
         while data_idx < len(data_packet_list):
-            while data_idx < len(data_packet_list) and sender.rdt_send(data_packet_list[data_idx]):
+            while data_idx < len(data_packet_list) and sender.tcp_send(data_packet_list[data_idx]):
                 if DEBUG_PRINT:
                     print(f"[{datetime.now().strftime('%S.%f')}] Sent packet {data_idx + 1}")
                 data_idx += 1
-            sender.input(False)
+            sender.input(last_acks=False)
 
         # Ensure all packets are ACKed before finishing
-        while not sender.input(True):
+        while not sender.input(last_acks=True):
             pass
+
+        sender.close_connection()
 
         return start_time
 

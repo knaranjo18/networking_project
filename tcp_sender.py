@@ -61,6 +61,10 @@ class TCPSender:
             sock.sendto(pkt, (constants.RX_ADDR, constants.RX_PORT))
 
     def establish_connection(self) -> None:
+        """
+        Responsible for performing the TCP 3-way handshake at the beginning of a connection
+        """
+
         syn_packet = SynPacket(seq_num=0, src_port=constants.TX_PORT, dst_port=constants.RX_PORT)
         connected = False
         
@@ -90,9 +94,14 @@ class TCPSender:
                 connected = True
    
     def close_connection(self) -> None:
+        """
+        Responsible for handling the FIN handshake to close a connection when done sending data.
+        """
+
         fin_pkt = FinPacket(self.nextseqnum, constants.TX_PORT, constants.RX_PORT)
         fail_cnt = 0
         
+        # Try a few times in case the finack was lost or corrupted
         while fail_cnt < 8:
             self.udt_send(self.sock, fin_pkt.to_bytes())
 
@@ -154,6 +163,11 @@ class TCPSender:
             self.udt_send(self.sock, resend_pkt.to_bytes())
 
     def clean_buffer(self) -> None:
+        """
+        Used to update the buffer that stores the packets in flight that may need to be retransmited if a failure occurs. If a packet has been acknowledged, 
+        we can tell that is the case if the base is greater than the sequence number, then the packet is removed from the buffer.
+        """
+
         while True:
             if self.sndpkt_buffer and self.sndpkt_buffer[0][0].seq_num < self.base:
                 acked_pkt = self.sndpkt_buffer.popleft()
@@ -166,6 +180,8 @@ class TCPSender:
                 break
 
     def updateTimeout(self, sampleRTT) -> None:
+        """Called to dynamically update the timeout based on the sampleRTT after an ACK is received"""
+
         # Initialization value, should only run once
         if not self.estimatedRTT:
             self.estimatedRTT = sampleRTT
@@ -189,8 +205,9 @@ class TCPSender:
         self.timeout_list.append((curr_time, self.curr_timeout))
         self.sampRTT_list.append((curr_time, sampleRTT))
 
-
     def slow_start(self, isTimeout) -> None:
+        """Implements slow start congestion control logic that shifts to congestion avoidance after threshold"""
+
         if isTimeout:
             self.ssthresh = self.cwnd/2
             self.cwnd = constants.MAX_DATA_SIZE
@@ -205,8 +222,11 @@ class TCPSender:
             else:
                 self.linear_cwnd_increase()
 
-
     def linear_cwnd_increase(self) -> None:
+        """
+        Increase the congestion window by small amount that ends up being linear over one RTT
+        """
+
         potential_new_cwnd = self.cwnd + constants.MAX_DATA_SIZE * (constants.MAX_DATA_SIZE / self.cwnd)
         
         if potential_new_cwnd <= self.free_rx_buffer:
@@ -218,6 +238,10 @@ class TCPSender:
         self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
 
     def exponential_cwnd_increase(self) -> None:
+        """
+        Increase the congestion window by a large amount, that ends up being exponential in one RTT
+        """
+
         potential_cwnd = self.cwnd + constants.MAX_DATA_SIZE
 
         if potential_cwnd <= self.free_rx_buffer:
@@ -229,6 +253,10 @@ class TCPSender:
         self.cwnd_list.append((time.time() - self.start_time, self.cwnd))
 
     def AIMD(self, isTimeout) -> None:
+        """
+        Implements additive increase, multiplictive decrease congestion control where increase linearly on good ACK then decrease by half on timeout.
+        """
+
         if isTimeout:
             potential_cwnd = self.cwnd * 0.5
 
@@ -245,6 +273,10 @@ class TCPSender:
             self.linear_cwnd_increase()
 
     def tahoe(self, isTimeout, dupAckLimit) -> None:
+        """
+        Implements the TCP Tahoe congestion control with slow start, congestion avoidance, and fast retransmit.
+        """
+
         if isTimeout or dupAckLimit:
             self.ssthresh = self.cwnd / 2
             self.cwnd = constants.MAX_DATA_SIZE
@@ -260,6 +292,10 @@ class TCPSender:
                 self.linear_cwnd_increase()
 
     def reno(self, isTimeout, dupAckLimit) -> None:
+        """
+        Implements the TCP Reno congestion control with slow start, congestion avoidance, fast retransmit and fast recovery.
+        """
+
         if isTimeout:
             self.ssthresh = self.cwnd / 2
             self.cwnd = constants.MAX_DATA_SIZE
@@ -311,6 +347,10 @@ class TCPSender:
                 self.linear_cwnd_increase()           
 
     def update_cwnd_ack(self, ack_num) -> None:
+        """
+        Used when we receive a non-corrupted ACK. Chooses the appropriate congestion control based on initialization parameter.
+        """
+
         if ack_num == self.prev_ack:
             self.dupACKcount += 1
             new_ack = False
@@ -334,8 +374,6 @@ class TCPSender:
 
                 # Fast Retransmit
                 self.do_resend()
-
-   
 
                 self.tahoe(isTimeout=False, dupAckLimit=True)
                 self.dupACKcount = 0

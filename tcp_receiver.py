@@ -42,6 +42,9 @@ class TCPReceiver:
 
 
     def establish_connection(self):
+        """
+        Responsible for performing the TCP 3-way handshake at the beginning of a connection
+        """
         syn_received = False
         ack_received = False
 
@@ -139,6 +142,8 @@ class TCPReceiver:
         "Called by application to get received data, returns None if data is corrupted and -1 if connection done"
         rx_bytes_buffer = []
         readable = True
+
+        # Checks to see if there is data on the socket buffer and stores it for processing.
         while readable:
             readable, _, _ = select.select([self.sock], [], [], 0)
 
@@ -150,6 +155,7 @@ class TCPReceiver:
                 if self.free_buffer < 0:
                     self.free_buffer = 0
          
+        # Process the data from each of the packets
         data_final = b""
         for rcvpkt_bytes in rx_bytes_buffer:
             # Receive packet and potentially corrupt it
